@@ -1,11 +1,10 @@
 const CACHE_NAME = 'shilpsetu-v1';
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/before.png',
-  '/after.png',
-  '/icons/icon-128.png',
-  '/icons/icon-512.png'
+  'index.html',
+  'before.png',
+  'after.png',
+  'icons/icon-128.png',
+  'icons/icon-512.png'
 ];
 
 self.addEventListener('install', event => {
