@@ -623,6 +623,34 @@
             margin-top: 2px;
         }
 
+        /* ---------- Speech toggle button (always on right) ---------- */
+        .speech-toggle {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            z-index: 100;
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            font-size: 18px;
+            transition: all 0.2s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .speech-toggle:active {
+            transform: scale(0.92);
+        }
+        .speech-toggle.active {
+            background: var(--bamboo);
+            color: #fff;
+            border-color: var(--bamboo);
+        }
+
         @media (min-width: 768px) {
             .app-screen {
                 padding: 30px 40px 20px;
@@ -689,10 +717,10 @@
     <div id="root"></div>
 
     <script type="text/babel" data-presets="react">
-        const { useState, useEffect, useRef, useContext, createContext } = React;
+        const { useState, useEffect, useRef, useContext, createContext, useCallback } = React;
 
         // ---------- LANGUAGE CONTEXT ----------
-        const LanguageContext = createContext();
+        const LanguageContext = createContext({ lang: 'en', setLang: () => {} });
 
         // ---------- PRODUCT DATA (ENGLISH & HINDI) – fallback ----------
         const PRODUCT_EN = {
@@ -1186,6 +1214,12 @@
                 case "tag":
                     return <svg { ...p }><path d="M20.5 12.5l-8-8H4v8.5l8 8a2 2 0 0 0 2.8 0l5.7-5.7a2 2 0 0 0 0-2.8z" /><circle
                             cx="8.5" cy="8.5" r="1.2" fill={ color } stroke="none" /></svg>;
+                case "volume-2":
+                    return <svg { ...p }><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /><path
+                            d="M15.54 8.46a5 5 0 0 1 0 7.07" /></svg>;
+                case "volume-x":
+                    return <svg { ...p }><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><line x1="23" y1="9" x2="17" y2="15" /><line
+                            x1="17" y1="9" x2="23" y2="15" /></svg>;
                 default:
                     return null;
             }
@@ -1338,7 +1372,6 @@
         }
 
         // ---------- API FUNCTIONS (REAL BACKEND INTEGRATION) ----------
-        // Replace the base URL with your actual backend
         const API_BASE = 'https://your-api.com';
 
         async function apiCall(endpoint, options = {}) {
@@ -1358,7 +1391,7 @@
                 body: formData,
             });
             if (!res.ok) throw new Error('Enhance failed');
-            return res.json(); // { enhancedImageUrl: '...' }
+            return res.json();
         }
 
         async function extractProductFromVoice(transcript) {
@@ -1403,12 +1436,139 @@
             });
         }
 
+        // ---------- SPEECH HOOK (fixed: no cut-off, Hindi working) ----------
+        function useSpeech() {
+            const [enabled, setEnabled] = useState(true);
+            const synth = useRef(null);
+            const utterance = useRef(null);
+            const voicesLoaded = useRef(false);
+            const voiceLoadAttempts = useRef(0);
+
+            useEffect(() => {
+                if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+                    synth.current = window.speechSynthesis;
+                    // Preload voices
+                    const loadVoices = () => {
+                        if (synth.current.getVoices().length > 0) {
+                            voicesLoaded.current = true;
+                            return true;
+                        }
+                        return false;
+                    };
+                    if (!loadVoices()) {
+                        const handler = () => {
+                            voicesLoaded.current = true;
+                            synth.current.removeEventListener('voiceschanged', handler);
+                        };
+                        synth.current.addEventListener('voiceschanged', handler);
+                        // Fallback: if voices don't load within 3 seconds, assume they're loaded
+                        setTimeout(() => {
+                            if (!voicesLoaded.current && synth.current.getVoices().length > 0) {
+                                voicesLoaded.current = true;
+                            }
+                            // Even if no voices, we set it to true to allow speech with default
+                            if (!voicesLoaded.current) {
+                                voicesLoaded.current = true;
+                            }
+                        }, 3000);
+                    }
+                }
+            }, []);
+
+            const speak = useCallback((text, lang = 'en') => {
+                if (!enabled || !synth.current || !text) return;
+
+                // Cancel any ongoing speech
+                synth.current.cancel();
+
+                const doSpeak = () => {
+                    const utteranceObj = new SpeechSynthesisUtterance(text);
+                    // Set language correctly
+                    utteranceObj.lang = lang === 'hi' ? 'hi-IN' : 'en-US';
+                    utteranceObj.rate = 0.9;
+                    utteranceObj.pitch = 1.0;
+
+                    // Try to find a matching voice
+                    const voices = synth.current.getVoices();
+                    let voice = null;
+                    if (lang === 'hi') {
+                        voice = voices.find(v => v.lang.startsWith('hi')) || null;
+                        // If no Hindi voice found, try to find any voice that supports Hindi
+                        if (!voice) {
+                            voice = voices.find(v => v.lang.includes('hi')) || null;
+                        }
+                    }
+                    if (!voice && lang !== 'hi') {
+                        voice = voices.find(v => v.lang.startsWith(lang)) || null;
+                    }
+                    if (voice) utteranceObj.voice = voice;
+
+                    // Store reference
+                    utterance.current = utteranceObj;
+
+                    // Add a longer delay to ensure the utterance is fully constructed and the
+                    // speech synthesis engine is ready — fixes the initial cut-off issue
+                    setTimeout(() => {
+                        try {
+                            synth.current.speak(utteranceObj);
+                        } catch (e) {
+                            // Fallback: try again without voice selection
+                            const fallbackUtterance = new SpeechSynthesisUtterance(text);
+                            fallbackUtterance.lang = lang === 'hi' ? 'hi-IN' : 'en-US';
+                            synth.current.speak(fallbackUtterance);
+                        }
+                    }, 300);
+                };
+
+                // If voices are already loaded or we have voices available, speak immediately
+                if (voicesLoaded.current || synth.current.getVoices().length > 0) {
+                    doSpeak();
+                } else {
+                    // Wait for voices to load
+                    const handler = () => {
+                        voicesLoaded.current = true;
+                        doSpeak();
+                        synth.current.removeEventListener('voiceschanged', handler);
+                    };
+                    synth.current.addEventListener('voiceschanged', handler);
+                    // Fallback timeout
+                    setTimeout(() => {
+                        if (!voicesLoaded.current) {
+                            voicesLoaded.current = true;
+                            doSpeak();
+                        }
+                    }, 2500);
+                }
+            }, [enabled]);
+
+            const toggle = useCallback(() => {
+                setEnabled(prev => {
+                    if (prev) synth.current?.cancel();
+                    return !prev;
+                });
+            }, []);
+
+            // Cleanup on unmount
+            useEffect(() => {
+                return () => {
+                    synth.current?.cancel();
+                };
+            }, []);
+
+            return { speak, toggle, enabled };
+        }
+
         // ---------- APP ----------
         function App() {
             const [screen, setScreen] = useState("splash");
             const [lang, setLang] = useState("en");
             const [history, setHistory] = useState([]);
             const [productPublished, setProductPublished] = useState(false);
+            const s = useStrings();
+            const product = useProduct();
+
+            // Speech integration
+            const { speak, toggle, enabled } = useSpeech();
 
             const go = (s) => { setHistory(h => [...h, screen]);
                 setScreen(s); };
@@ -1420,6 +1580,92 @@
                     return h.slice(0, -1);
                 });
             };
+
+            // Generate speech message based on current screen
+            const getSpeechMessage = useCallback(() => {
+                const langCode = lang;
+                const strings = STRINGS[langCode] || STRINGS.en;
+                const prod = langCode === "hi" ? PRODUCT_HI : PRODUCT_EN;
+
+                switch (screen) {
+                    case "splash":
+                        return `${strings.appName}. ${strings.tagline}. ${strings.splashDesc}`;
+                    case "language":
+                        return `${strings.chooseLang}. ${strings.langSub}`;
+                    case "role":
+                        return `${strings.roleTitle}. ${strings.roleSub}`;
+                    case "profile":
+                        return `${strings.profileTitle}. ${strings.profileSub}`;
+                    case "home":
+                        return `${strings.goodMorning}, ${strings.artisanName}. You have 12 products, 4 orders, and income of 46,000 rupees. Tap add product to list a new item.`;
+                    case "products":
+                        return strings.productsTab + ". " + strings.productsSub;
+                    case "buyers":
+                        return strings.buyersTab + ". " + strings.buyersSub;
+                    case "business":
+                        return strings.businessTab + ". " + strings.businessSub + `. Enquiries 12, orders 4, sales 46,000 rupees.`;
+                    case "profile2":
+                        return `${strings.profileTab}. ${strings.artisanName} from ${strings.artisanLocation}. ${strings.artisanCraft}, ${strings.artisanExperience} experience.`;
+                    case "addStart":
+                        return strings.addProductTitle + ". " + strings.addProductSub;
+                    case "camera":
+                        return strings.cameraFrame;
+                    case "enhance":
+                        return strings.aiEnhance;
+                    case "voiceDescribe":
+                        return strings.tellProduct + ". " + strings.tellProductSub;
+                    case "understandVoice":
+                        return strings.understandingProduct;
+                    case "productDetails":
+                        return strings.productDetailsReady + ". " + strings.aiGeneratedDetails;
+                    case "aiDescription":
+                        return strings.productDescription + ". " + strings.aiGeneratedDesc;
+                    case "craftStoryIntro":
+                        return strings.craftStoryIntro + ". " + strings.craftStorySub;
+                    case "craftStoryVoice":
+                        return strings.recordingStory;
+                    case "craftStoryProcess":
+                        return strings.creatingStory;
+                    case "craftStoryReveal":
+                        return strings.meerasCraftStory + ". " + strings.aiGeneratedCraftStory;
+                    case "pricingInput":
+                        return strings.pricingTitle + ". " + strings.pricingSub;
+                    case "pricingProcess":
+                        return strings.calculatingPrice;
+                    case "pricingReveal":
+                        return `${strings.suggestedPrice} is ${prod.suggestedPrice} rupees. Range ${prod.rangeLow} to ${prod.rangeHigh}.`;
+                    case "finalReview":
+                        return strings.reviewListing + ". " + strings.reviewSub;
+                    case "publishing":
+                        return strings.preparingListing;
+                    case "live":
+                        return strings.productLive + ". " + strings.buyersCanDiscover;
+                    case "buyerMatch":
+                        return strings.foundBuyers + ". " + strings.foundBuyersSub;
+                    case "buyerDetail":
+                        return `${strings.buyerDetailTitle}. ${strings.interestedQty}. ${strings.expectedPrice}.`;
+                    case "copilot":
+                        return strings.copilotTitle + ". " + strings.copilotTag;
+                    case "summary":
+                        return "Journey complete. " + strings.journeySummary;
+                    default:
+                        return "";
+                }
+            }, [screen, lang, s, product]);
+
+            // Speak when screen changes – with longer delay to prevent cut-off
+            useEffect(() => {
+                const msg = getSpeechMessage();
+                if (msg) {
+                    const timer = setTimeout(() => speak(msg, lang), 800);
+                    return () => clearTimeout(timer);
+                }
+            }, [screen, lang, getSpeechMessage, speak]);
+
+            // Re‑speak if language changes on same screen
+            useEffect(() => {
+                // This will re‑run on lang change because of the dependency above
+            }, [lang]);
 
             const showNav = ["home", "products", "buyers", "business", "profile2"].includes(screen);
 
@@ -1522,6 +1768,15 @@
             return (
                 <LanguageContext.Provider value={ { lang, setLang } }>
                     <div className="app-container">
+                        {/* Speech toggle button - always on right */}
+                        <button
+                            className={`speech-toggle ${enabled ? 'active' : ''}`}
+                            onClick={ toggle }
+                            aria-label={ enabled ? 'Disable voice assistance' : 'Enable voice assistance' }
+                        >
+                            <Icon name={ enabled ? 'volume-2' : 'volume-x' } size={ 20 } color={ enabled ? '#fff' : 'currentColor' } />
+                        </button>
+
                         <div className="app-screen">
                             { content }
                         </div>
@@ -1574,12 +1829,10 @@
                             <div className="brand-text">ShilpSetu</div>
                             <div className="brand-sub">Your craft · Your digital business</div>
                         </div>
-
                         <div style={ { borderRadius: 24, overflow: "hidden", width: "100%", maxWidth: 280, height: 180,
                                 boxShadow: "var(--shadow)" } }>
                             <WorkshopScene cluttered={ true } />
                         </div>
-
                         <div>
                             <p style={ { margin: "0 0 4px", fontWeight: 700, fontSize: 15.5 } }>{ s.tagline }</p>
                             <p style={ { margin: 0, color: "var(--ink-soft)", fontSize: 14, lineHeight: 1.55,
@@ -1706,19 +1959,18 @@
             );
         }
 
-        // ---------- HOME ----------
+        // ---------- HOME (portrait on left) ----------
         function Home({ go, productPublished }) {
             const s = useStrings();
             const product = useProduct();
             return (
                 <ScreenShell>
-                    <div style={ { display: "flex", alignItems: "center", justifyContent: "space-between",
-                            marginBottom: 18 } }>
+                    <div style={ { display: "flex", alignItems: "center", gap: 12, marginBottom: 18 } }>
+                        <MeeraPortrait size={ 52 } />
                         <div>
                             <div style={ { fontSize: 13, color: "var(--ink-soft)", fontWeight: 700 } }>{ s.goodMorning }</div>
                             <h1 className="serif" style={ { margin: 0, fontSize: 24, fontWeight: 600 } }>{ s.artisanName }</h1>
                         </div>
-                        <MeeraPortrait size={ 52 } />
                     </div>
 
                     <button className="btn-primary" style={ { display: "flex", alignItems: "center",
@@ -1975,7 +2227,6 @@
             useEffect(() => {
                 if (stage === "counting") {
                     if (count === 0) {
-                        // Capture image
                         if (videoRef.current && videoRef.current.srcObject) {
                             const canvas = document.createElement('canvas');
                             canvas.width = videoRef.current.videoWidth;
@@ -1983,8 +2234,6 @@
                             const ctx = canvas.getContext('2d');
                             ctx.drawImage(videoRef.current, 0, 0);
                             const dataUrl = canvas.toDataURL('image/jpeg');
-                            // Store captured image in a ref or state
-                            // For demo, we'll just go to flash
                         }
                         setStage("flash");
                         setTimeout(() => setStage("captured"), 400);
@@ -2080,8 +2329,6 @@
                 if (phase === "processing") {
                     setTimeout(async () => {
                         try {
-                            // const result = await enhanceImage(imageBlob);
-                            // setEnhancedUrl(result.enhancedImageUrl);
                             setEnhancedUrl('after.png');
                         } catch (e) {
                             console.warn('API failed, using fallback');
