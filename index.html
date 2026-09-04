@@ -711,6 +711,26 @@
             background: #fff;
             border: 5px solid rgba(255, 255, 255, .35);
         }
+
+        /* ===== Camera preview fixes ===== */
+        .camera-preview {
+            position: relative;
+            width: 100%;
+            min-height: 420px;
+            overflow: hidden;
+            background: #000;
+        }
+
+        .camera-preview video {
+            position: absolute;
+            inset: 0;
+        }
+
+        .camera-preview img {
+            max-width: 100%;
+        }
+        /* ===== */
+
     </style>
 </head>
 <body>
@@ -830,8 +850,18 @@
                 aiEnhance: "ShilpSetu AI is improving your product photo",
                 aiEnhanceDone: "Your product photo is ready",
                 aiAtWork: "AI at work",
-                aiSteps: ["Detecting product", "Removing background distractions", "Improving lighting",
+                // ---------- Context‑specific steps ----------
+                enhanceSteps: ["Detecting product", "Removing background distractions", "Improving lighting",
                     "Correcting framing", "Centering product", "Preparing marketplace image"
+                ],
+                understandingSteps: ["Transcribing audio", "Extracting key details", "Identifying product type",
+                    "Structuring information", "Generating product description", "Refining details"
+                ],
+                craftStorySteps: ["Analyzing your story", "Identifying key themes", "Crafting narrative",
+                    "Adding emotional depth", "Polishing story", "Finalizing craft story"
+                ],
+                listingSteps: ["Preparing product data", "Generating thumbnail", "Creating product page",
+                    "Checking listing quality", "Optimizing for search", "Finalizing your listing"
                 ],
                 beforeAfterDesc: "AI improved the lighting, removed background distractions, and centered your product. Drag the slider to compare.",
                 useEnhanced: "Use Enhanced Photo",
@@ -1024,8 +1054,21 @@
                 aiEnhance: "शिल्पसेतु AI आपकी उत्पाद फोटो को सुधार रहा है",
                 aiEnhanceDone: "आपकी उत्पाद फोटो तैयार है",
                 aiAtWork: "AI कार्यरत",
-                aiSteps: ["उत्पाद का पता लगाना", "पृष्ठभूमि की गड़बड़ी हटाना", "प्रकाश में सुधार",
+                // ---------- Context‑specific steps (Hindi) ----------
+                enhanceSteps: ["उत्पाद का पता लगाना", "पृष्ठभूमि की गड़बड़ी हटाना", "प्रकाश में सुधार",
                     "फ्रेमिंग को सही करना", "उत्पाद को केंद्रित करना", "मार्केटप्लेस छवि तैयार करना"
+                ],
+                understandingSteps: ["ऑडियो ट्रांसक्राइब कर रहा हूँ", "मुख्य विवरण निकाल रहा हूँ",
+                    "उत्पाद प्रकार पहचान रहा हूँ", "जानकारी संरचित कर रहा हूँ", "उत्पाद विवरण बना रहा हूँ",
+                    "विवरण परिष्कृत कर रहा हूँ"
+                ],
+                craftStorySteps: ["आपकी कहानी का विश्लेषण कर रहा हूँ", "मुख्य विषयों की पहचान कर रहा हूँ",
+                    "कथा बना रहा हूँ", "भावनात्मक गहराई जोड़ रहा हूँ", "कहानी को परिष्कृत कर रहा हूँ",
+                    "क्राफ्ट कहानी अंतिम रूप दे रहा हूँ"
+                ],
+                listingSteps: ["उत्पाद डेटा तैयार कर रहा हूँ", "थंबनेल बना रहा हूँ", "उत्पाद पृष्ठ बना रहा हूँ",
+                    "लिस्टिंग गुणवत्ता जाँच रहा हूँ", "खोज के लिए अनुकूलित कर रहा हूँ",
+                    "आपकी लिस्टिंग अंतिम रूप दे रहा हूँ"
                 ],
                 beforeAfterDesc: "AI ने प्रकाश में सुधार किया, पृष्ठभूमि की गड़बड़ी हटाई, और आपके उत्पाद को केंद्रित किया। तुलना करने के लिए स्लाइडर को खींचें।",
                 useEnhanced: "सुधारी गई फोटो का उपयोग करें",
@@ -1229,27 +1272,7 @@
         const Palette = { skin: "#C48A56", skinDeep: "#A66E3E", saree: "#8E3B21", sareeDeep: "#6E2C18",
             dupatta: "#2F6F62", headscarf: "#B5502E", bamboo: "#C9A24A", bambooDeep: "#9C7A2E", mat: "#D8C89A" };
 
-        function MeeraPortrait({ size = 112, mood = "calm" }) {
-            return (
-                <svg width={ size } height={ size } viewBox="0 0 120 120">
-                    <circle cx="60" cy="60" r="58" fill="#F3E4C4" />
-                    <path d="M18 96c4-24 18-38 42-38s38 14 42 38" fill={ Palette.saree } />
-                    <path d="M30 92c6-18 15-27 30-27s24 9 30 27" fill={ Palette.dupatta } opacity="0.9" />
-                    <circle cx="60" cy="47" r="24" fill={ Palette.skin } />
-                    <path d="M36 40c0-16 10-27 24-27s24 11 24 27c0-6-3-11-9-13-4 6-13 8-21 8-6 0-11 2-14 6-2 3-4 5-4 5z"
-                        fill={ Palette.headscarf } />
-                    <path d="M84 40c1-3 1-6 0-9" stroke={ Palette.headscarf } strokeWidth="6" fill="none"
-                    strokeLinecap="round" />
-                    { mood === "happy" ? ( <><path d="M48 52c1 2 3 2 4 0" stroke="#3a2413" strokeWidth="2" fill="none"
-                                strokeLinecap="round" /><path d="M68 52c1 2 3 2 4 0" stroke="#3a2413" strokeWidth="2" fill="none"
-                                strokeLinecap="round" /><path d="M50 60c3 4 17 4 20 0" stroke="#3a2413" strokeWidth="2.4"
-                                fill="none" strokeLinecap="round" /></> ) : ( <><circle cx="50" cy="50" r="2"
-                                fill="#3a2413" /><circle cx="70" cy="50" r="2" fill="#3a2413" /><path d="M52 61c3 2 13 2 16 0"
-                                stroke="#3a2413" strokeWidth="2.2" fill="none" strokeLinecap="round" /></> ) }
-                    <circle cx="60" cy="45" r="1.6" fill={ Palette.headscarf } />
-                </svg>
-            );
-        }
+        // MeeraPortrait is replaced with <img src="meera.png" /> in all usages
 
         function WorkshopScene({ cluttered = true }) {
             return (
@@ -1267,8 +1290,9 @@
                     <rect x="0" y="220" width="320" height="100" fill={ cluttered ? "#CBB27C" : "#EFE0B8" } />
                     <g transform="translate(90,150)">
                         <foreignObject x="-70" y="-10" width="220" height="220">
-                            <div xmlns="http://www.w3.org/1999/xhtml" style={ { transform: "scale(1.7)" } }><MeeraPortrait
-                                    size={ 90 } /></div>
+                            <div xmlns="http://www.w3.org/1999/xhtml" style={ { transform: "scale(1.7)" } }>
+                                <img src="meera.png" style={ { width: 90, height: 90, borderRadius: "50%", objectFit: "cover" } } />
+                            </div>
                         </foreignObject>
                     </g>
                     <g transform="translate(150,190) scale(1.05)">
@@ -1307,10 +1331,11 @@
             );
         }
 
-        // ---------- Product Image ----------
-        function ProductImage({ size = 140, className = "" }) {
+        // ---------- Product Image (now accepts src prop) ----------
+        function ProductImage({ size = 140, className = "", src = null }) {
+            const imageSrc = src || "after.png";
             return (
-                <img src="after.png" alt="Product" style={ { width: size, height: size, objectFit: "cover", borderRadius: 16 } }
+                <img src={ imageSrc } alt="Product" style={ { width: size, height: size, objectFit: "cover", borderRadius: 16 } }
                     className={ className } />
             );
         }
@@ -1383,15 +1408,24 @@
             return res.json();
         }
 
-        async function enhanceImage(imageFile) {
+        // ----- REAL BACKGROUND REMOVAL (via Vercel proxy) -----
+        async function removeBackground(imageFile) {
             const formData = new FormData();
-            formData.append('image', imageFile);
-            const res = await fetch(`${API_BASE}/enhance`, {
-                method: 'POST',
+            formData.append("file", imageFile);
+            formData.append("bg", "ffffff");
+            formData.append("src", "ShilpSetu");
+
+            const res = await fetch("https://shilpsetu-bg-proxy.vercel.app/api/remove", {
+                method: "POST",
                 body: formData,
             });
-            if (!res.ok) throw new Error('Enhance failed');
-            return res.json();
+
+            if (!res.ok) {
+                throw new Error(`Proxy error: ${res.status}`);
+            }
+
+            const blob = await res.blob();
+            return URL.createObjectURL(blob);
         }
 
         async function extractProductFromVoice(transcript) {
@@ -1564,6 +1598,11 @@
             const [lang, setLang] = useState("en");
             const [history, setHistory] = useState([]);
             const [productPublished, setProductPublished] = useState(false);
+            // Store captured image data (data URL)
+            const [capturedImageData, setCapturedImageData] = useState(null);
+            // Store enhanced image URL (blob URL)
+            const [enhancedImageUrl, setEnhancedImageUrl] = useState(null);
+
             const s = useStrings();
             const product = useProduct();
 
@@ -1684,10 +1723,10 @@
                     content = <ProfileSetup go={ go } back={ back } />;
                     break;
                 case "home":
-                    content = <Home go={ go } productPublished={ productPublished } />;
+                    content = <Home go={ go } productPublished={ productPublished } enhancedImageUrl={ enhancedImageUrl } />;
                     break;
                 case "products":
-                    content = <ProductsTab go={ go } productPublished={ productPublished } />;
+                    content = <ProductsTab go={ go } productPublished={ productPublished } enhancedImageUrl={ enhancedImageUrl } />;
                     break;
                 case "buyers":
                     content = <BuyersTab go={ go } />;
@@ -1702,19 +1741,19 @@
                     content = <AddProductStart go={ go } back={ back } />;
                     break;
                 case "camera":
-                    content = <CameraScreen go={ go } back={ back } />;
+                    content = <CameraScreen go={ go } back={ back } onCapture={ (dataUrl) => setCapturedImageData(dataUrl) } />;
                     break;
                 case "enhance":
-                    content = <EnhanceScreen go={ go } back={ back } />;
+                    content = <EnhanceScreen go={ go } back={ back } capturedImageData={ capturedImageData } onEnhanceComplete={ (url) => setEnhancedImageUrl(url) } />;
                     break;
                 case "voiceDescribe":
-                    content = <VoiceDescribe go={ go } back={ back } />;
+                    content = <VoiceDescribe go={ go } back={ back } enhancedImageUrl={ enhancedImageUrl } />;
                     break;
                 case "understandVoice":
                     content = <UnderstandVoice go={ go } back={ back } />;
                     break;
                 case "productDetails":
-                    content = <ProductDetails go={ go } back={ back } />;
+                    content = <ProductDetails go={ go } back={ back } enhancedImageUrl={ enhancedImageUrl } />;
                     break;
                 case "aiDescription":
                     content = <AIDescription go={ go } back={ back } />;
@@ -1741,13 +1780,13 @@
                     content = <PricingReveal go={ go } back={ back } />;
                     break;
                 case "finalReview":
-                    content = <FinalReview go={ go } back={ back } />;
+                    content = <FinalReview go={ go } back={ back } enhancedImageUrl={ enhancedImageUrl } />;
                     break;
                 case "publishing":
-                    content = <Publishing go={ go } back={ back } onPublishDone={ () => { setProductPublished(true); } } />;
+                    content = <Publishing go={ go } back={ back } enhancedImageUrl={ enhancedImageUrl } onPublishDone={ () => { setProductPublished(true); } } />;
                     break;
                 case "live":
-                    content = <LiveListing go={ go } back={ back } />;
+                    content = <LiveListing go={ go } back={ back } enhancedImageUrl={ enhancedImageUrl } />;
                     break;
                 case "buyerMatch":
                     content = <BuyerMatch go={ go } back={ back } />;
@@ -1759,7 +1798,7 @@
                     content = <Copilot go={ go } back={ back } />;
                     break;
                 case "summary":
-                    content = <Summary go={ go } back={ back } />;
+                    content = <Summary go={ go } back={ back } enhancedImageUrl={ enhancedImageUrl } />;
                     break;
                 default:
                     content = <Splash go={ go } />;
@@ -1924,7 +1963,7 @@
                 <ScreenShell>
                     <Header title={ s.profileTitle } sub={ s.profileSub } onBack={ back } />
                     <div className="card" style={ { display: "flex", gap: 14, alignItems: "center", marginBottom: 16 } }>
-                        <MeeraPortrait size={ 72 } />
+                        <img src="meera.png" style={ { width: 72, height: 72, borderRadius: "50%", objectFit: "cover" } } />
                         <div>
                             <div style={ { fontWeight: 800, fontSize: 17 } }>{ s.artisanName }</div>
                             <div style={ { fontSize: 13, color: "var(--ink-soft)" } }>{ s.artisanLocation }</div>
@@ -1960,13 +1999,13 @@
         }
 
         // ---------- HOME (portrait on left) ----------
-        function Home({ go, productPublished }) {
+        function Home({ go, productPublished, enhancedImageUrl }) {
             const s = useStrings();
             const product = useProduct();
             return (
                 <ScreenShell>
                     <div style={ { display: "flex", alignItems: "center", gap: 12, marginBottom: 18 } }>
-                        <MeeraPortrait size={ 52 } />
+                        <img src="meera.png" style={ { width: 52, height: 52, borderRadius: "50%", objectFit: "cover" } } />
                         <div>
                             <div style={ { fontSize: 13, color: "var(--ink-soft)", fontWeight: 700 } }>{ s.goodMorning }</div>
                             <h1 className="serif" style={ { margin: 0, fontSize: 24, fontWeight: 600 } }>{ s.artisanName }</h1>
@@ -2016,7 +2055,8 @@
                             onClick={ () => go("live") }>
                                 <div style={ { width: 56, height: 56, borderRadius: 12, overflow: "hidden",
                                         flex: "0 0 56px" } }>
-                                    <ProductImage size={ 56 } /></div>
+                                    <ProductImage size={ 56 } src={ enhancedImageUrl } />
+                                </div>
                                 <div style={ { flex: 1 } }>
                                     <div style={ { fontWeight: 700, fontSize: 14 } }>{ product.name }</div>
                                     <div style={ { fontSize: 12.5, color: "var(--ink-soft)" } }>{ s.price } · { s.stock }</div>
@@ -2029,7 +2069,7 @@
             );
         }
 
-        function ProductsTab({ go, productPublished }) {
+        function ProductsTab({ go, productPublished, enhancedImageUrl }) {
             const s = useStrings();
             const product = useProduct();
             return (
@@ -2041,7 +2081,8 @@
                                 marginBottom: 12 } } onClick={ () => go("live") }>
                             <div style={ { width: 56, height: 56, borderRadius: 12, overflow: "hidden",
                                     flex: "0 0 56px" } }>
-                                <ProductImage size={ 56 } /></div>
+                                <ProductImage size={ 56 } src={ enhancedImageUrl } />
+                            </div>
                             <div style={ { flex: 1 } }>
                                 <div style={ { fontWeight: 700, fontSize: 14 } }>{ product.name }</div>
                                 <div style={ { fontSize: 12.5, color: "var(--ink-soft)" } }>{ s.price } · 12 in stock · 3
@@ -2115,7 +2156,7 @@
                 <ScreenShell>
                     <Header title={ s.profileTab } />
                     <div className="card" style={ { display: "flex", gap: 14, alignItems: "center", marginBottom: 16 } }>
-                        <MeeraPortrait size={ 72 } />
+                        <img src="meera.png" style={ { width: 72, height: 72, borderRadius: "50%", objectFit: "cover" } } />
                         <div>
                             <div style={ { fontWeight: 800, fontSize: 17 } }>{ s.artisanName }</div>
                             <div style={ { fontSize: 13, color: "var(--ink-soft)" } }>{ s.artisanLocation }</div>
@@ -2192,68 +2233,140 @@
             );
         }
 
-        // -------- CAMERA SCREEN ----------
-        function CameraScreen({ go, back }) {
+        // -------- CAMERA SCREEN (fixed) ----------
+        function CameraScreen({ go, back, onCapture }) {
             const s = useStrings();
             const [stage, setStage] = useState("frame");
             const [count, setCount] = useState(3);
+            const [capturedImage, setCapturedImage] = useState(null);
             const videoRef = useRef(null);
-            const canvasRef = useRef(null);
             const streamRef = useRef(null);
 
             useEffect(() => {
-                if (stage === "frame") {
-                    const startCamera = async () => {
-                        try {
-                            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-                            streamRef.current = stream;
-                            if (videoRef.current) {
-                                videoRef.current.srcObject = stream;
-                                videoRef.current.play();
+                let isMounted = true;
+
+                const startCamera = async () => {
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({
+                            video: { 
+                                facingMode: 'environment',
+                                width: { ideal: 1920 },
+                                height: { ideal: 1080 }
                             }
-                        } catch (err) {
-                            console.warn('Camera not available, using fallback image');
+                        });
+                        
+                        if (!isMounted) {
+                            stream.getTracks().forEach(t => t.stop());
+                            return;
                         }
-                    };
-                    startCamera();
+
+                        streamRef.current = stream;
+                        if (videoRef.current) {
+                            videoRef.current.srcObject = stream;
+                            videoRef.current.onloadedmetadata = () => {
+                                videoRef.current.play().catch(e => console.error("Play error:", e));
+                            };
+                        }
+                    } catch (err) {
+                        console.warn('Camera not available, using fallback image', err);
+                    }
+                };
+
+                if (stage === "frame" || stage === "counting") {
+                    if (!streamRef.current) {
+                        startCamera();
+                    }
                 }
+
+                return () => {
+                    isMounted = false;
+                };
+            }, [stage]);
+
+            // Cleanup camera stream ONLY when component unmounts
+            useEffect(() => {
                 return () => {
                     if (streamRef.current) {
                         streamRef.current.getTracks().forEach(t => t.stop());
                     }
                 };
-            }, [stage]);
+            }, []);
+
+            // Frame Capture Logic
+            const capturePhoto = async () => {
+                const video = videoRef.current;
+                const stream = streamRef.current;
+
+                // Method 1: ImageCapture API (Best for Mobile/Chrome - bypasses video element pipeline)
+                if (stream && 'ImageCapture' in window) {
+                    try {
+                        const track = stream.getVideoTracks()[0];
+                        const imageCapture = new ImageCapture(track);
+                        const blob = await imageCapture.takePhoto();
+                        const dataUrl = await new Promise((resolve) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve(reader.result);
+                            reader.readAsDataURL(blob);
+                        });
+                        return dataUrl;
+                    } catch (err) {
+                        console.warn("ImageCapture failed, falling back to canvas:", err);
+                    }
+                }
+
+                // Method 2: Direct Canvas Fallback
+                if (video && video.videoWidth > 0 && video.videoHeight > 0) {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Draw frame
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    return canvas.toDataURL('image/jpeg', 0.95);
+                }
+
+                return null;
+            };
 
             useEffect(() => {
                 if (stage === "counting") {
                     if (count === 0) {
-                        if (videoRef.current && videoRef.current.srcObject) {
-                            const canvas = document.createElement('canvas');
-                            canvas.width = videoRef.current.videoWidth;
-                            canvas.height = videoRef.current.videoHeight;
-                            const ctx = canvas.getContext('2d');
-                            ctx.drawImage(videoRef.current, 0, 0);
-                            const dataUrl = canvas.toDataURL('image/jpeg');
-                        }
-                        setStage("flash");
-                        setTimeout(() => setStage("captured"), 400);
+                        (async () => {
+                            const imageData = await capturePhoto();
+                            if (imageData) {
+                                setCapturedImage(imageData);
+                                // Store in sessionStorage for EnhanceScreen
+                                sessionStorage.setItem('capturedImage', imageData);
+                                // Also call onCapture to keep parent state in sync (if needed)
+                                if (onCapture) onCapture(imageData);
+                            }
+                            setStage("flash");
+                            setTimeout(() => setStage("captured"), 400);
+                        })();
                         return;
                     }
+                    
                     const t = setTimeout(() => setCount(c => c - 1), 700);
                     return () => clearTimeout(t);
                 }
-            }, [stage, count]);
+            }, [stage, count, onCapture]);
 
             return (
                 <div className="camera-full">
                     <div className="camera-preview">
-                        { stage !== "captured" && (
-                            <video ref={ videoRef } autoPlay playsInline muted style={ { width: '100%', height: '100%',
-                                    objectFit: 'cover' } } />
-                        ) }
-                        { stage !== "captured" && !videoRef.current?.srcObject && (
-                            <img src="before.png" alt="Camera preview" />
-                        ) }
+                        {/* KEEP VIDEO MOUNTED until stage === 'captured' to prevent frame-drop */}
+                        <div style={{ display: stage === "captured" ? "none" : "block", width: "100%", height: "100%" }}>
+                            <video 
+                                ref={ videoRef } 
+                                autoPlay 
+                                playsInline 
+                                muted 
+                                crossOrigin="anonymous"
+                                style={ { width: '100%', height: '100%', objectFit: 'cover' } } 
+                            />
+                        </div>
+
                         { stage !== "captured" && (
                             <div style={ { position: "absolute", inset: 24, border: "2.5px dashed rgba(255,255,255,.85)",
                                     borderRadius: 18, pointerEvents: "none" } }></div>
@@ -2269,46 +2382,54 @@
                                     justifyContent: "center" } }>
                                 <div style={ { width: 96, height: 96, borderRadius: "50%", background: "rgba(0,0,0,.55)",
                                         color: "#fff", fontSize: 44, fontWeight: 800, display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center" } }>{ count }</div>
+                                        alignItems: "center", justifyContent: "center" } }>{ count }</div>
                             </div>
                         ) }
                         { stage === "flash" && <div className="flash"></div> }
                         { stage === "captured" && (
                             <div style={ { width: "100%", height: "100%", display: "flex", flexDirection: "column",
                                     alignItems: "center", justifyContent: "center", background: "#161109" } }>
-                                <img src="before.png" alt="Captured" style={ { width: "80%", height: "80%",
-                                        objectFit: "contain", borderRadius: 16 } } />
+                                <img 
+                                    src={ capturedImage || "before.png" } 
+                                    alt="Captured" 
+                                    style={ { width: "80%", height: "80%", objectFit: "contain", borderRadius: 16 } } 
+                                />
                                 <span style={ { background: "rgba(0,0,0,.6)", color: "#fff", padding: "7px 14px",
-                                        borderRadius: 99, fontSize: 12.5, fontWeight: 700, marginTop: 10 } }>{ s
-                                        .photoCaptured }</span>
+                                        borderRadius: 99, fontSize: 12.5, fontWeight: 700, marginTop: 10 } }>
+                                    { s.photoCaptured }
+                                </span>
                             </div>
                         ) }
                     </div>
                     <div className="camera-controls">
                         { stage !== "captured" ? (
                             <div className="row">
-                                <div style={ { width: 40, height: 40, borderRadius: "50%",
-                                        background: "rgba(255,255,255,.12)",
-                                        display: "flex", alignItems: "center", justifyContent: "center" } }><Icon
-                                        name="flash" color="#fff" size={ 18 } /></div>
-                                <button onClick={ () => stage === "frame" && setStage("counting") }
-                                className="capture-btn"></button>
-                                <div style={ { width: 40, height: 40, borderRadius: "50%",
-                                        background: "rgba(255,255,255,.12)",
-                                        display: "flex", alignItems: "center", justifyContent: "center" } }><Icon
-                                        name="flip" color="#fff" size={ 18 } /></div>
+                                <div style={ { width: 40, height: 40, borderRadius: "50%", background: "rgba(255,255,255,.12)",
+                                        display: "flex", alignItems: "center", justifyContent: "center" } }>
+                                    <Icon name="flash" color="#fff" size={ 18 } />
+                                </div>
+                                <button onClick={ () => stage === "frame" && setStage("counting") } className="capture-btn"></button>
+                                <div style={ { width: 40, height: 40, borderRadius: "50%", background: "rgba(255,255,255,.12)",
+                                        display: "flex", alignItems: "center", justifyContent: "center" } }>
+                                    <Icon name="flip" color="#fff" size={ 18 } />
+                                </div>
                             </div>
                         ) : (
                             <div style={ { display: "flex", flexDirection: "column", gap: 10 } }>
-                                <button className="btn-primary" onClick={ () => go("enhance") }>{ s
-                                    .useThisPhoto }</button>
-                                <button className="btn-ghost" style={ { color: "#EFE7D2", textAlign: "center" } } onClick={ () =>
-                                    { setStage("frame");
-                                        setCount(3);
-                                        if (videoRef.current && videoRef.current.srcObject) {
-                                            videoRef.current.play();
-                                        } } }>{ s.retake }</button>
+                                <button className="btn-primary" onClick={ () => go("enhance") }>
+                                    { s.useThisPhoto }
+                                </button>
+                                <button className="btn-ghost" style={ { color: "#EFE7D2", textAlign: "center" } } onClick={ () => { 
+                                    setStage("frame");
+                                    setCount(3);
+                                    setCapturedImage(null);
+                                    sessionStorage.removeItem('capturedImage');
+                                    if (videoRef.current && videoRef.current.srcObject) {
+                                        videoRef.current.play();
+                                    }
+                                } }>
+                                    { s.retake }
+                                </button>
                             </div>
                         ) }
                     </div>
@@ -2316,84 +2437,227 @@
             );
         }
 
-        // ---------- ENHANCE SCREEN ----------
-        function EnhanceScreen({ go, back }) {
+        // ---------- ENHANCE SCREEN (uses enhanceSteps) ----------
+        function EnhanceScreen({ go, back, capturedImageData, onEnhanceComplete }) {
             const s = useStrings();
+
             const [phase, setPhase] = useState("processing");
-            const steps = [s.step1, s.step2, s.step3, s.step4, s.step5, s.step6];
+            const [enhancedUrl, setEnhancedUrl] = useState(null);
+            const [error, setError] = useState(null);
+
+            // Use context-specific steps
+            const steps = s.enhanceSteps || [
+                "Detecting product", "Removing background distractions", "Improving lighting",
+                "Correcting framing", "Centering product", "Preparing marketplace image"
+            ];
+
             const [pos, setPos] = useState(50);
             const dragging = useRef(false);
-            const [enhancedUrl, setEnhancedUrl] = useState(null);
+
+            // Get image from sessionStorage (set by CameraScreen) or from prop fallback
+            const getImageData = () => {
+                const stored = sessionStorage.getItem('capturedImage');
+                if (stored) return stored;
+                if (capturedImageData) return capturedImageData;
+                return null;
+            };
 
             useEffect(() => {
-                if (phase === "processing") {
-                    setTimeout(async () => {
-                        try {
-                            setEnhancedUrl('after.png');
-                        } catch (e) {
-                            console.warn('API failed, using fallback');
-                            setEnhancedUrl('after.png');
+                let cancelled = false;
+
+                const processImage = async () => {
+                    try {
+                        setPhase("processing");
+                        setError(null);
+
+                        const imageData = getImageData();
+                        let imageFile;
+
+                        if (imageData && imageData.startsWith("data:")) {
+                            // Convert data URL to File
+                            const arr = imageData.split(",");
+                            const mime = arr[0].match(/:(.*?);/)[1];
+                            const bstr = atob(arr[1]);
+                            let n = bstr.length;
+                            const u8arr = new Uint8Array(n);
+                            while (n--) {
+                                u8arr[n] = bstr.charCodeAt(n);
+                            }
+                            imageFile = new File([u8arr], "captured.jpg", { type: mime });
+                        } else {
+                            // Fallback: use before.png
+                            const response = await fetch("before.png");
+                            const blob = await response.blob();
+                            imageFile = new File([blob], "before.png", { type: blob.type });
                         }
-                        setPhase("done");
-                    }, 5000);
-                }
-            }, [phase]);
+
+                        // Call BGNinja API via proxy
+                        const resultUrl = await removeBackground(imageFile);
+                        if (!cancelled) {
+                            setEnhancedUrl(resultUrl);
+                            // Propagate to parent
+                            if (onEnhanceComplete) onEnhanceComplete(resultUrl);
+                            setPhase("done");
+                        }
+                    } catch (err) {
+                        console.warn("BGNinja failed:", err);
+                        if (!cancelled) {
+                            setError("API failed. Using fallback image.");
+                            // Use fallback image
+                            const fallbackUrl = "after.png";
+                            setEnhancedUrl(fallbackUrl);
+                            if (onEnhanceComplete) onEnhanceComplete(fallbackUrl);
+                            setPhase("done");
+                        }
+                    }
+                };
+
+                processImage();
+
+                return () => {
+                    cancelled = true;
+                };
+            }, []);
 
             return (
                 <ScreenShell>
-                    <Header title={ phase === "processing" ? s.aiEnhance : s.aiEnhanceDone } tagText={ s.aiAtWork }
-                        tagType="ai" onBack={ back } />
-                    { phase === "processing" ? (
+                    <Header
+                        title={
+                            phase === "processing"
+                                ? s.aiEnhance
+                                : s.aiEnhanceDone
+                        }
+                        tagText={s.aiAtWork}
+                        tagType="ai"
+                        onBack={back}
+                    />
+
+                    {phase === "processing" ? (
                         <>
-                            <div style={ { borderRadius: 18, overflow: "hidden", marginBottom: 18,
-                                    border: "1px solid var(--line)" } }>
-                                <img src="before.png" alt="Before" style={ { width: "100%", height: "100%",
-                                        objectFit: "cover" } } />
+                            <div
+                                style={{
+                                    borderRadius: 18,
+                                    overflow: "hidden",
+                                    marginBottom: 18,
+                                    border: "1px solid var(--line)",
+                                }}
+                            >
+                                <img
+                                    src={getImageData() || "before.png"}
+                                    alt="Before"
+                                    style={{
+                                        width: "100%",
+                                        height: "100%",
+                                        objectFit: "cover",
+                                    }}
+                                />
                             </div>
-                            <Checklist items={ steps } onDone={ () => {} } />
+                            <Checklist items={steps} onDone={() => {}} />
                         </>
                     ) : (
                         <>
-                            <div className="slider-wrap" style={ { height: 200, marginBottom: 14, userSelect: "none" } }
-                                onMouseMove={ e => { if (!dragging.current) return; const r = e.currentTarget
-                                        .getBoundingClientRect();
-                                    setPos(Math.min(100, Math.max(0, ((e.clientX - r.left) / r.width) * 100))); } }
-                                onMouseDown={ () => dragging.current = true } onMouseUp={ () => dragging.current = false }
-                                onMouseLeave={ () => dragging.current = false }
-                                onTouchMove={ e => { const r = e.currentTarget.getBoundingClientRect();
+                            <div
+                                className="slider-wrap"
+                                style={{
+                                    height: 200,
+                                    marginBottom: 14,
+                                    userSelect: "none",
+                                }}
+                                onMouseMove={e => {
+                                    if (!dragging.current) return;
+                                    const r = e.currentTarget.getBoundingClientRect();
+                                    setPos(Math.min(100, Math.max(0, ((e.clientX - r.left) / r.width) * 100)));
+                                }}
+                                onMouseDown={() => dragging.current = true}
+                                onMouseUp={() => dragging.current = false}
+                                onMouseLeave={() => dragging.current = false}
+                                onTouchMove={e => {
+                                    const r = e.currentTarget.getBoundingClientRect();
                                     const x = e.touches[0].clientX;
-                                    setPos(Math.min(100, Math.max(0, ((x - r.left) / r.width) * 100))); } }>
-                                <div style={ { position: "absolute", inset: 0 } }>
-                                    <img src="before.png" alt="Before" style={ { width: "100%", height: "100%",
-                                            objectFit: "cover" } } />
+                                    setPos(Math.min(100, Math.max(0, ((x - r.left) / r.width) * 100)));
+                                }}
+                            >
+                                {/* BEFORE */}
+                                <div style={{ position: "absolute", inset: 0 }}>
+                                    <img
+                                        src={getImageData() || "before.png"}
+                                        alt="Before"
+                                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                    />
                                 </div>
-                                <div style={ { position: "absolute", inset: 0, clipPath: `inset(0 0 0 ${pos}%)` } }>
-                                    <img src={ enhancedUrl || "after.png" } alt="After" style={ { width: "100%",
-                                            height: "100%",
-                                            objectFit: "cover" } } />
+                                {/* AFTER */}
+                                <div
+                                    style={{
+                                        position: "absolute",
+                                        inset: 0,
+                                        clipPath: `inset(0 0 0 ${pos}%)`,
+                                    }}
+                                >
+                                    <img
+                                        src={enhancedUrl || "after.png"}
+                                        alt="After"
+                                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                    />
                                 </div>
-                                <div className="slider-handle" style={ { left: pos + "%" } }></div>
-                                <div className="slider-grip" style={ { left: pos + "%" } }><Icon name="arrow-left"
-                                        size={ 12 } /><Icon name="arrow-right" size={ 12 } /></div>
-                                <span style={ { position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,.55)",
-                                        color: "#fff", fontSize: 10.5, fontWeight: 700, padding: "3px 8px",
-                                        borderRadius: 99 } }>{ s.beforeLabel }</span>
-                                <span style={ { position: "absolute", top: 8, right: 8, background: "rgba(46,74,52,.85)",
-                                        color: "#fff", fontSize: 10.5, fontWeight: 700, padding: "3px 8px",
-                                        borderRadius: 99 } }>{ s.afterLabel }</span>
+                                <div className="slider-handle" style={{ left: pos + "%" }} />
+                                <div className="slider-grip" style={{ left: pos + "%" }}>
+                                    <Icon name="arrow-left" size={12} />
+                                    <Icon name="arrow-right" size={12} />
+                                </div>
+                                <span
+                                    style={{
+                                        position: "absolute",
+                                        top: 8,
+                                        left: 8,
+                                        background: "rgba(0,0,0,.55)",
+                                        color: "#fff",
+                                        fontSize: 10.5,
+                                        fontWeight: 700,
+                                        padding: "3px 8px",
+                                        borderRadius: 99,
+                                    }}
+                                >
+                                    {s.beforeLabel}
+                                </span>
+                                <span
+                                    style={{
+                                        position: "absolute",
+                                        top: 8,
+                                        right: 8,
+                                        background: "rgba(46,74,52,.85)",
+                                        color: "#fff",
+                                        fontSize: 10.5,
+                                        fontWeight: 700,
+                                        padding: "3px 8px",
+                                        borderRadius: 99,
+                                    }}
+                                >
+                                    {s.afterLabel}
+                                </span>
                             </div>
-                            <p style={ { fontSize: 13.5, color: "var(--ink-soft)", lineHeight: 1.5,
-                                marginTop: 0 } }>{ s.beforeAfterDesc }</p>
+                            {error && (
+                                <p style={{ fontSize: 12, color: "var(--ink-soft)" }}>
+                                    {error}
+                                </p>
+                            )}
+                            <p style={{ fontSize: 13.5, color: "var(--ink-soft)", lineHeight: 1.5, marginTop: 0 }}>
+                                {s.beforeAfterDesc}
+                            </p>
                         </>
-                    ) }
-                    <div style={ { flex: 1 } }></div>
-                    { phase === "done" && (
-                        <div style={ { display: "flex", flexDirection: "column", gap: 10 } }>
-                            <button className="btn-primary" onClick={ () => go("voiceDescribe") }>{ s
-                                .useEnhanced }</button>
-                            <button className="btn-secondary" onClick={ () => go("camera") }>{ s.retakePhoto }</button>
+                    )}
+
+                    <div style={{ flex: 1 }} />
+
+                    {phase === "done" && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                            <button className="btn-primary" onClick={() => go("voiceDescribe")}>
+                                {s.useEnhanced}
+                            </button>
+                            <button className="btn-secondary" onClick={() => go("camera")}>
+                                {s.retakePhoto}
+                            </button>
                         </div>
-                    ) }
+                    )}
                 </ScreenShell>
             );
         }
@@ -2427,7 +2691,7 @@
             return { seconds, shownLines };
         }
 
-        function VoiceDescribe({ go, back }) {
+        function VoiceDescribe({ go, back, enhancedImageUrl }) {
             const s = useStrings();
             const { lang } = useContext(LanguageContext);
             const lines = lang === "hi" ? DESC_LINES_HI : DESC_LINES_EN;
@@ -2436,7 +2700,7 @@
                 <ScreenShell>
                     <Header title={ s.tellProduct } sub={ s.tellProductSub } onBack={ back } />
                     <div style={ { borderRadius: 16, overflow: "hidden", marginBottom: 18, height: 130 } }>
-                        <ProductImage size={ 130 } />
+                        <ProductImage size={ 130 } src={ enhancedImageUrl } />
                     </div>
                     { phase === "idle" && (
                         <div style={ { flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
@@ -2490,10 +2754,13 @@
             );
         }
 
-        // ---------- UNDERSTAND VOICE ----------
+        // ---------- UNDERSTAND VOICE (uses understandingSteps) ----------
         function UnderstandVoice({ go, back }) {
             const s = useStrings();
-            const steps = [s.step1, s.step2, s.step3, s.step4, s.step5, s.step6];
+            const steps = s.understandingSteps || [
+                "Transcribing audio", "Extracting key details", "Identifying product type",
+                "Structuring information", "Generating product description", "Refining details"
+            ];
             const [done, setDone] = useState(false);
             const { lang } = useContext(LanguageContext);
             const lines = lang === "hi" ? DESC_LINES_HI : DESC_LINES_EN;
@@ -2527,7 +2794,7 @@
         }
 
         // ---------- PRODUCT DETAILS ----------
-        function ProductDetails({ go, back }) {
+        function ProductDetails({ go, back, enhancedImageUrl }) {
             const s = useStrings();
             const product = useProduct();
             const [isEditing, setIsEditing] = useState(false);
@@ -2560,7 +2827,7 @@
                     <ProgressDots step={ 2 } total={ 6 } />
                     <Header title={ s.productDetailsReady } tagText={ s.aiGeneratedDetails } tagType="ai" onBack={ back } />
                     <div style={ { borderRadius: 16, overflow: "hidden", marginBottom: 16, height: 140 } }>
-                        <ProductImage size={ 140 } />
+                        <ProductImage size={ 140 } src={ enhancedImageUrl } />
                     </div>
                     <div className="card" style={ { marginBottom: 16 } }>
                         { rows.map(([label, key], i) => (
@@ -2673,7 +2940,7 @@
                         tagType="ai" onBack={ back } />
                     <div style={ { flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
                             justifyContent: "center", gap: 16 } }>
-                        <MeeraPortrait size={ 110 } />
+                        <img src="meera.png" style={ { width: 110, height: 110, borderRadius: "50%", objectFit: "cover" } } />
                         <button className="btn-clay" style={ { width: "auto", padding: "14px 26px", display: "flex",
                                 alignItems: "center", gap: 10 } } onClick={ () => go("craftStoryVoice") }>
                             <Icon name="mic" size={ 18 } color="#fff" /> { s.tapSpeakStory }
@@ -2706,10 +2973,13 @@
             );
         }
 
-        // ---------- CRAFT STORY PROCESS ----------
+        // ---------- CRAFT STORY PROCESS (uses craftStorySteps) ----------
         function CraftStoryProcess({ go, back }) {
             const s = useStrings();
-            const steps = [s.step1, s.step2, s.step3, s.step4, s.step5, s.step6];
+            const steps = s.craftStorySteps || [
+                "Analyzing your story", "Identifying key themes", "Crafting narrative",
+                "Adding emotional depth", "Polishing story", "Finalizing craft story"
+            ];
             const { lang } = useContext(LanguageContext);
             const lines = lang === "hi" ? STORY_LINES_HI : STORY_LINES_EN;
 
@@ -2754,7 +3024,7 @@
                     <Header title={ s.meerasCraftStory } tagText={ s.aiGeneratedCraftStory } tagType="ai" onBack={ back } />
                     <div className="card" style={ { marginBottom: 16, background: "linear-gradient(155deg,#FBF4E6,#F3E7CE)" } }>
                         <div style={ { display: "flex", gap: 10, alignItems: "center", marginBottom: 10 } }>
-                            <MeeraPortrait size={ 40 } />
+                            <img src="meera.png" style={ { width: 40, height: 40, borderRadius: "50%", objectFit: "cover" } } />
                             <div style={ { fontWeight: 800, fontSize: 14 } }>{ s.artisanName } · { s.artisanLocation }</div>
                         </div>
                         { isEditing ? (
@@ -2986,7 +3256,7 @@
                         fontSize: 13, fontWeight: 700 } }>{ v }</span></div>;
         }
 
-        function FinalReview({ go, back }) {
+        function FinalReview({ go, back, enhancedImageUrl }) {
             const s = useStrings();
             const product = useProduct();
             const [isEditing, setIsEditing] = useState(false);
@@ -3020,7 +3290,7 @@
                     <ProgressDots step={ 6 } total={ 6 } />
                     <Header title={ s.reviewListing } sub={ s.reviewSub } onBack={ back } />
                     <div className="card" style={ { marginBottom: 14, padding: 0, overflow: "hidden" } }>
-                        <div style={ { height: 150 } }><ProductImage size={ 150 } /></div>
+                        <div style={ { height: 150 } }><ProductImage size={ 150 } src={ enhancedImageUrl } /></div>
                         <div style={ { padding: 16 } }>
                             { isEditing ? (
                                 <input type="text" value={ data.name } onChange={ e => setData({ ...data, name: e.target
@@ -3106,10 +3376,13 @@
             );
         }
 
-        // ---------- PUBLISHING ----------
-        function Publishing({ go, back, onPublishDone }) {
+        // ---------- PUBLISHING (uses listingSteps) ----------
+        function Publishing({ go, back, onPublishDone, enhancedImageUrl }) {
             const s = useStrings();
-            const steps = [s.step1, s.step2, s.step3, s.step4, s.step5, s.step6];
+            const steps = s.listingSteps || [
+                "Preparing product data", "Generating thumbnail", "Creating product page",
+                "Checking listing quality", "Optimizing for search", "Finalizing your listing"
+            ];
             const [done, setDone] = useState(false);
 
             useEffect(() => {
@@ -3125,7 +3398,7 @@
                         { !done ? (
                             <>
                                 <div style={ { display: "flex", justifyContent: "center", marginBottom: 10 } }>
-                                    <div style={ { height: 110 } }><ProductImage size={ 110 } /></div>
+                                    <div style={ { height: 110 } }><ProductImage size={ 110 } src={ enhancedImageUrl } /></div>
                                 </div>
                                 <Checklist items={ steps } speed={ 480 } onDone={ () => setDone(true) } />
                             </>
@@ -3146,14 +3419,14 @@
         }
 
         // ---------- LIVE LISTING ----------
-        function LiveListing({ go, back }) {
+        function LiveListing({ go, back, enhancedImageUrl }) {
             const s = useStrings();
             const product = useProduct();
             return (
                 <ScreenShell>
                     <Header title={ product.name } tagText={ s.live } tagType="live" onBack={ back } />
                     <div style={ { borderRadius: 16, overflow: "hidden", marginBottom: 16, height: 160 } }>
-                        <ProductImage size={ 160 } />
+                        <ProductImage size={ 160 } src={ enhancedImageUrl } />
                     </div>
                     <div className="serif" style={ { fontSize: 26, fontWeight: 600, color: "var(--bamboo-deep)",
                             marginBottom: 14 } }>₹{ product.suggestedPrice }</div>
@@ -3355,8 +3628,8 @@
             );
         }
 
-        // ---------- SUMMARY ----------
-        function Summary({ go, back }) {
+        // ---------- SUMMARY (now receives enhancedImageUrl) ----------
+        function Summary({ go, back, enhancedImageUrl }) {
             const s = useStrings();
             const journey = s.journeySteps;
             return (
@@ -3365,9 +3638,11 @@
                     <div style={ { display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center",
                             gap: 14, marginBottom: 20 } }>
                         <div style={ { display: "flex", gap: -10 } }>
-                            <MeeraPortrait size={ 80 } />
+                            <img src="meera.png" style={ { width: 80, height: 80, borderRadius: "50%", objectFit: "cover" } } />
                         </div>
-                        <div style={ { height: 70 } }><ProductImage size={ 70 } /></div>
+                        <div style={ { height: 70 } }>
+                            <ProductImage size={ 70 } src={ enhancedImageUrl } />
+                        </div>
                     </div>
                     <div className="card" style={ { marginBottom: 18 } }>
                         { journey.map((j, i) => (
