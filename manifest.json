@@ -2,7 +2,7 @@
   "name": "ShilpSetu",
   "short_name": "ShilpSetu",
   "description": "Your craft. Your digital business.",
-  "start_url": "/",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#FBF4E6",
   "theme_color": "#2E4A34",
