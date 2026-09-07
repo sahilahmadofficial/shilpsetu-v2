@@ -1463,12 +1463,110 @@
             });
         }
 
+        // =============================================
+        // Copilot (Gemini) - proper implementation from copilot.html
+        // =============================================
+        const GEMINI_API_KEY = "your-api-key-goes-here";
+        const GEMINI_MODEL = "gemini-3.5-flash-lite";
+        const GEMINI_API_URL =
+            `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+
         async function askCopilot(question) {
-            return apiCall('/copilot', {
-                method: 'POST',
-                body: JSON.stringify({ question }),
+            const businessData = `
+        SHILPSETU BUSINESS DATA
+
+        Products:
+        - Bamboo Basket: 4 units sold, ₹800 per unit
+        - Handcrafted Wooden Bowl: 2 units sold, ₹600 per unit
+        - Terracotta Vase: 3 units sold, ₹500 per unit
+        - Handwoven Table Runner: 5 units sold, ₹900 per unit
+
+        Sales:
+        - Total units sold this month: 14
+        - Total revenue this month: ₹8,900
+        - Previous month revenue: ₹7,200
+        - Revenue growth: 23.6%
+
+        Customers:
+        - Total customers: 23
+        - New customers this month: 7
+        - Returning customers: 16
+
+        Orders:
+        - Total orders this month: 12
+        - Completed orders: 10
+        - Pending orders: 2
+        - Cancelled orders: 0
+
+        Best-selling product:
+        - Handwoven Table Runner: 5 units sold
+
+        Business location:
+        - Rajasthan, India
+        `;
+
+            const res = await fetch(GEMINI_API_URL, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": GEMINI_API_KEY
+                },
+                body: JSON.stringify({
+                    systemInstruction: {
+                        parts: [
+                            {
+                                text: `
+                    You are ShilpSetu Copilot, an AI business assistant
+                    for Indian artisans and small craft businesses.
+
+                    Analyze the business data provided below and answer
+                    the user's questions using that data.
+
+                    Important rules:
+                    - Use the provided business data as the source of truth.
+                    - Do not invent numbers.
+                    - If the requested information is not available,
+                      clearly say that it is not available.
+                    - Give practical and easy-to-understand advice.
+                    - Keep answers concise but useful.
+                    - Use short paragraphs and bullet points when appropriate.
+                    - For business metrics, clearly mention the relevant numbers.
+                    - Use ₹ for monetary values.
+                    - When giving recommendations, provide 2-3 actionable suggestions.
+                    - Avoid unnecessary technical language.
+                    - Do not use Markdown tables.
+
+                    ${businessData}
+                    `
+                            }
+                        ]
+                    },
+                    contents: [
+                        {
+                            parts: [
+                                {
+                                    text: question
+                                }
+                            ]
+                        }
+                    ]
+                })
             });
+
+            if (!res.ok) {
+                const error = await res.text();
+                throw new Error(`Gemini API error: ${res.status} ${error}`);
+            }
+
+            const data = await res.json();
+
+            return {
+                answer:
+                    data.candidates?.[0]?.content?.parts?.[0]?.text ||
+                    "Sorry, I couldn't generate a response."
+            };
         }
+        // =============================================
 
         // ---------- SPEECH HOOK (fixed: no cut-off, Hindi working) ----------
         function useSpeech() {
@@ -3537,46 +3635,106 @@
             );
         }
 
-        // ---------- COPILOT ----------
+        // ---------- COPILOT (FULL IMPLEMENTATION FROM copilot.html) ----------
         function Copilot({ go, back }) {
             const s = useStrings();
             const [asked, setAsked] = useState(false);
             const [listening, setListening] = useState(false);
+            const [thinking, setThinking] = useState(false);
             const [transcript, setTranscript] = useState("");
             const [response, setResponse] = useState("");
 
             const startListening = () => {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (!SpeechRecognition) {
+                    setResponse("Speech recognition is not supported in this browser.");
+                    setAsked(true);
+                    return;
+                }
+
+                const recognition = new SpeechRecognition();
+                recognition.lang = "en-US";
+                recognition.continuous = true;
+                recognition.interimResults = true;
+
                 setListening(true);
                 setTranscript("");
+                setResponse("");
                 setAsked(false);
-                setTimeout(() => {
-                    const question = s.copilotQuestion || "How is my business doing?";
-                    setTranscript(question);
-                    setTimeout(() => {
-                        setListening(false);
-                        const reply = s.copilotResponseDetailed || s.copilotResponse;
-                        setResponse(reply);
+
+                let finalTranscript = "";
+                let silenceTimer;
+
+                const resetSilenceTimer = () => {
+                    clearTimeout(silenceTimer);
+                    silenceTimer = setTimeout(() => {
+                        recognition.stop();
+                    }, 3000);
+                };
+
+                recognition.onresult = (event) => {
+                    let interimTranscript = "";
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const text = event.results[i][0].transcript;
+                        if (event.results[i].isFinal) {
+                            finalTranscript += text + " ";
+                        } else {
+                            interimTranscript += text;
+                        }
+                    }
+                    const currentTranscript = (finalTranscript + interimTranscript).trim();
+                    setTranscript(currentTranscript);
+                    resetSilenceTimer();
+                };
+
+                recognition.onerror = (event) => {
+                    console.error("Speech recognition error:", event.error);
+                    clearTimeout(silenceTimer);
+                    setListening(false);
+                    setResponse("I couldn't hear you. Please try again.");
+                    setAsked(true);
+                };
+
+                recognition.onend = async () => {
+                    clearTimeout(silenceTimer);
+                    const question = finalTranscript.trim();
+                    setListening(false);
+                    if (!question) {
+                        setResponse("I didn't hear anything. Please try again.");
                         setAsked(true);
-                    }, 1500);
-                }, 2000);
+                        return;
+                    }
+                    try {
+                        const result = await askCopilot(question);
+                        setResponse(result.answer);
+                        setAsked(true);
+                    } catch (error) {
+                        console.error("Copilot API error:", error);
+                        setResponse("Sorry, I couldn't get a response right now.");
+                        setAsked(true);
+                    }
+                };
+
+                recognition.start();
+                resetSilenceTimer();
             };
 
-            const handleQuestion = (q) => {
+            const handleQuestion = async (q) => {
                 setTranscript(q);
-                setListening(true);
-                setTimeout(() => {
-                    setListening(false);
-                    let reply = s.copilotResponseDetailed || s.copilotResponse;
-                    if (q.toLowerCase().includes("product") || q.toLowerCase().includes("best")) {
-                        reply = "Your bamboo basket is your best-selling product with 4 units sold this month.";
-                    } else if (q.toLowerCase().includes("contact") || q.toLowerCase().includes("who")) {
-                        reply = "You should contact Rajasthan Home Living – they showed strong interest.";
-                    } else if (q.toLowerCase().includes("improve") || q.toLowerCase().includes("sales")) {
-                        reply = "Consider offering a small discount on bulk orders or highlighting your craft story more.";
-                    }
-                    setResponse(reply);
+                setThinking(true);
+                setAsked(false);
+                setResponse("");
+                try {
+                    const result = await askCopilot(q);
+                    setResponse(result.answer);
                     setAsked(true);
-                }, 1500);
+                } catch (error) {
+                    console.error("Copilot error:", error);
+                    setResponse("Sorry, I couldn't get a response right now.");
+                    setAsked(true);
+                } finally {
+                    setThinking(false);
+                }
             };
 
             return (
@@ -3598,6 +3756,11 @@
                                 <Icon name="mic" size={ 16 } color="var(--clay)" />
                                 { s.listeningCopilot }
                                 <Waveform style={ { width: 60, height: 20 } } />
+                            </div>
+                        ) }
+                        { thinking && !listening && (
+                            <div className="voice-indicator" style={ { alignSelf: "flex-start" } }>
+                                ✨ Thinking...
                             </div>
                         ) }
                         { transcript && !listening && (
