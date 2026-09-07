@@ -1432,27 +1432,6 @@
             return URL.createObjectURL(blob);
         }
 
-        async function extractProductFromVoice(transcript) {
-            return apiCall('/extract-product', {
-                method: 'POST',
-                body: JSON.stringify({ transcript }),
-            });
-        }
-
-        async function generateDescription(productData) {
-            return apiCall('/generate-description', {
-                method: 'POST',
-                body: JSON.stringify(productData),
-            });
-        }
-
-        async function generateCraftStory(transcript) {
-            return apiCall('/generate-craft-story', {
-                method: 'POST',
-                body: JSON.stringify({ transcript }),
-            });
-        }
-
         async function getPricing(costs) {
             return apiCall('/price', {
                 method: 'POST',
@@ -1470,7 +1449,7 @@
         // =============================================
         // Copilot (Gemini) - full implementation from copilot-feature.html
         // =============================================
-        const GEMINI_API_KEY = "AQ.Ab8RN6I5ZEaPY4cwyIF-xc5C4rIV8_OJuORpCP16tuHX425eJg";
+        const GEMINI_API_KEY = "my-api-key";
         const GEMINI_MODEL = "gemini-3.5-flash-lite";
         const GEMINI_API_URL =
             `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
@@ -2782,866 +2761,3188 @@
             "मैंने यह शिल्प अपनी माँ से सीखा।"
         ];
 
-        function useRecorder(lines, onFinish, msPerLine = 1500) {
-            const [seconds, setSeconds] = useState(0);
-            const [shownLines, setShownLines] = useState(0);
-            useEffect(() => {
-                const timer = setInterval(() => setSeconds(s => s + 1), 1000);
-                return () => clearInterval(timer);
-            }, []);
-            useEffect(() => {
-                if (shownLines >= lines.length) { const t = setTimeout(onFinish, 700); return () => clearTimeout(t); }
-                const t = setTimeout(() => setShownLines(s => s + 1), msPerLine);
-                return () => clearTimeout(t);
-            }, [shownLines]);
-            return { seconds, shownLines };
-        }
 
-        function VoiceDescribe({ go, back, enhancedImageUrl }) {
-            const s = useStrings();
-            const { lang } = useContext(LanguageContext);
-            const lines = lang === "hi" ? DESC_LINES_HI : DESC_LINES_EN;
-            const [phase, setPhase] = useState("idle");
-            return (
-                <ScreenShell>
-                    <Header title={ s.tellProduct } sub={ s.tellProductSub } onBack={ back } />
-                    <div style={ { borderRadius: 16, overflow: "hidden", marginBottom: 18, height: 130 } }>
-                        <ProductImage size={ 130 } src={ enhancedImageUrl } />
-                    </div>
-                    { phase === "idle" && (
-                        <div style={ { flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
-                                justifyContent: "center", gap: 16 } }>
-                            <button className="mic-btn" onClick={ () => setPhase("rec") }>
-                                <Icon name="mic" color="#fff" size={ 34 } />
-                            </button>
-                            <div style={ { fontWeight: 700, fontSize: 15 } }>{ s.tapAndSpeak }</div>
-                        </div>
-                    ) }
-                    { phase === "rec" && <RecordingPanel lines={ lines } onFinish={ () => setPhase("done") } /> }
-                    { phase === "done" && (
-                        <div style={ { flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" } }>
-                            <div className="tag" style={ { marginBottom: 10 } }>{ s.recordingComplete }</div>
-                            <div className="card" style={ { fontSize: 14.5, lineHeight: 1.6 } }>{ lines.join(" ") }</div>
-                        </div>
-                    ) }
-                    <div style={ { flex: phase === "idle" ? 0 : 1 } }></div>
-                    { phase === "done" && <button className="btn-primary" onClick={ () => go("understandVoice") }>{ s
-                            .continue }</button> }
-                </ScreenShell>
+        
+// ===========================
+// ===== TAHA START =====
+
+// ---------- TEMPORARY APP DATA ----------
+// These variables pass data between your existing screens.
+// They do not change your UI.
+
+let currentProductTranscript = "";
+let currentProductData = null;
+
+
+// ---------- GEMINI REQUEST ----------
+
+async function callGemini(prompt) {
+    if (!GEMINI_API_KEY || GEMINI_API_KEY === "my-api-key") {
+        throw new Error("Please add your Gemini API key.");
+    }
+
+    const response = await fetch(GEMINI_API_URL, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": GEMINI_API_KEY
+        },
+        body: JSON.stringify({
+            contents: [
+                {
+                    parts: [
+                        {
+                            text: prompt
+                        }
+                    ]
+                }
+            ],
+            generationConfig: {
+                temperature: 0.4,
+                maxOutputTokens: 1000
+            }
+        })
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+            `Gemini API Error: ${response.status} ${errorText}`
+        );
+    }
+
+    const data = await response.json();
+
+    const text =
+        data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!text) {
+        throw new Error("Gemini returned an empty response.");
+    }
+
+    return text;
+}
+
+
+// ---------- EXTRACT PRODUCT DETAILS ----------
+
+async function extractProductFromVoice(transcript) {
+    const prompt = `
+You are an AI assistant helping an Indian handicraft artisan
+create a product catalog.
+
+Convert the following spoken product description into structured JSON.
+
+Extract these fields:
+- name
+- material
+- craft
+- color
+- pattern
+- origin
+- prodTime
+- description
+
+Rules:
+- Return ONLY valid JSON.
+- Do not include markdown.
+- If a field is not mentioned, use an empty string.
+- Keep the description short and professional.
+- Do not invent facts that were not mentioned.
+
+Spoken product description:
+${transcript}
+`;
+
+    const text = await callGemini(prompt);
+
+    const cleaned = text
+        .replace(/```json/g, "")
+        .replace(/```/g, "")
+        .trim();
+
+    return JSON.parse(cleaned);
+}
+
+
+// ---------- GENERATE PRODUCT DESCRIPTION ----------
+
+async function generateDescription(productData) {
+    const prompt = `
+You are a professional product catalog writer for Indian handicraft artisans.
+
+Create a proper, attractive, pointwise product description
+using the following product information.
+
+Rules:
+- Return ONLY valid JSON.
+- Do not include markdown.
+- Use simple, professional English.
+- Make the description suitable for an online marketplace.
+- Mention the material, craftsmanship, usage, and uniqueness.
+- Keep it concise.
+- Return the description as an array of 4 to 6 short points.
+- Do not invent facts.
+
+Product information:
+${JSON.stringify(productData)}
+`;
+
+    const text = await callGemini(prompt);
+
+    const cleaned = text
+        .replace(/```json/g, "")
+        .replace(/```/g, "")
+        .trim();
+
+    const result = JSON.parse(cleaned);
+
+    return {
+        description: Array.isArray(result.description)
+            ? result.description
+            : [result.description]
+    };
+}
+
+
+// ============================================================
+// BROWSER SPEECH-TO-TEXT
+// ============================================================
+
+const SpeechRecognition =
+    window.SpeechRecognition ||
+    window.webkitSpeechRecognition;
+
+
+// ---------- SPEECH RECOGNITION HOOK ----------
+
+function useRecorder(onFinish) {
+    const [seconds, setSeconds] = useState(0);
+    const [transcript, setTranscript] = useState("");
+    const [isListening, setIsListening] = useState(false);
+    const [error, setError] = useState("");
+
+    const recognitionRef = useRef(null);
+    const timerRef = useRef(null);
+
+    const startRecording = () => {
+        if (!SpeechRecognition) {
+            setError(
+                "Speech recognition is not supported in this browser."
             );
+            return;
         }
 
-        function RecordingPanel({ lines, onFinish }) {
-            const { seconds, shownLines } = useRecorder(lines, onFinish);
-            const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
-            const ss = String(seconds % 60).padStart(2, "0");
-            const s = useStrings();
-            return (
-                <div style={ { flex: 1, display: "flex", flexDirection: "column", gap: 16 } }>
-                    <div style={ { display: "flex", flexDirection: "column", alignItems: "center", gap: 10 } }>
-                        <div className="mic-btn" style={ { width: 74, height: 74 } }>
-                            <span className="mic-pulse"></span><span className="mic-pulse p2"></span>
-                            <Icon name="mic" color="#fff" size={ 26 } />
-                        </div>
-                        <div style={ { fontWeight: 800, fontSize: 13.5, color: "var(--clay)" } }>{ s.listening } { mm }:{ ss }</div>
-                        <Waveform />
-                    </div>
-                    <div className="card" style={ { minHeight: 110 } }>
-                        <div className="field-label">Live transcript</div>
-                        { lines.slice(0, shownLines).map((l, i) => (
-                            <p key={ i } className="fade-in" style={ { margin: "0 0 6px", fontSize: 14.5,
-                                    lineHeight: 1.5 } }>{ l }</p>
-                        )) }
-                        { shownLines < lines.length &&
-                            <span style={ { display: "inline-block", width: 8, height: 16, background: "var(--clay)",
-                                    animation: "pulse 1s infinite" } }></span> }
-                    </div>
-                </div>
+        const recognition = new SpeechRecognition();
+
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = "en-IN";
+
+        recognitionRef.current = recognition;
+
+        let finalTranscript = "";
+
+        recognition.onstart = () => {
+            setIsListening(true);
+            setError("");
+            setSeconds(0);
+
+            timerRef.current = setInterval(() => {
+                setSeconds(s => s + 1);
+            }, 1000);
+        };
+
+        recognition.onresult = (event) => {
+            let interimTranscript = "";
+
+            for (
+                let i = event.resultIndex;
+                i < event.results.length;
+                i++
+            ) {
+                const text = event.results[i][0].transcript;
+
+                if (event.results[i].isFinal) {
+                    finalTranscript += text + " ";
+                } else {
+                    interimTranscript += text;
+                }
+            }
+
+            setTranscript(
+                finalTranscript + interimTranscript
             );
-        }
+        };
 
-        // ---------- UNDERSTAND VOICE (uses understandingSteps) ----------
-        function UnderstandVoice({ go, back }) {
-            const s = useStrings();
-            const steps = s.understandingSteps || [
-                "Transcribing audio", "Extracting key details", "Identifying product type",
-                "Structuring information", "Generating product description", "Refining details"
-            ];
-            const [done, setDone] = useState(false);
-            const { lang } = useContext(LanguageContext);
-            const lines = lang === "hi" ? DESC_LINES_HI : DESC_LINES_EN;
-
-            useEffect(() => {
-                const extract = async () => {
-                    try {
-                        // const result = await extractProductFromVoice(lines.join(' '));
-                    } catch (e) {
-                        console.warn('API failed, using fallback');
-                    }
-                    setDone(true);
-                };
-                extract();
-            }, []);
-
-            return (
-                <ScreenShell>
-                    <Header title={ s.understandingProduct } tagText={ s.aiAtWork } tagType="ai" onBack={ back } />
-                    <div className="card" style={ { marginBottom: 16 } }>
-                        <div className="field-label">{ s.whatMeeraSaid }</div>
-                        <p style={ { margin: 0, fontSize: 14, lineHeight: 1.6, color: "var(--ink-soft)" } }>{ lines
-                            .join(" ") }</p>
-                    </div>
-                    <Checklist items={ steps } onDone={ () => setDone(true) } />
-                    <div style={ { flex: 1 } }></div>
-                    { done && <button className="btn-primary" onClick={ () => go("productDetails") }>{ s
-                        .continue }</button> }
-                </ScreenShell>
+        recognition.onerror = (event) => {
+            console.error(
+                "Speech recognition error:",
+                event.error
             );
+
+            if (event.error === "not-allowed") {
+                setError("Please allow microphone access.");
+            } else if (event.error === "no-speech") {
+                setError("No speech detected. Please try again.");
+            } else {
+                setError(
+                    "Could not recognize speech. Please try again."
+                );
+            }
+
+            stopRecording();
+        };
+
+        recognition.onend = () => {
+            setIsListening(false);
+
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
+        };
+
+        recognition.start();
+    };
+
+    const stopRecording = () => {
+        if (recognitionRef.current) {
+            recognitionRef.current.stop();
         }
 
-        // ---------- PRODUCT DETAILS ----------
-        function ProductDetails({ go, back, enhancedImageUrl }) {
-            const s = useStrings();
-            const product = useProduct();
-            const [isEditing, setIsEditing] = useState(false);
-            const [data, setData] = useState({
-                name: product.name,
-                material: product.material,
-                craft: product.craft,
-                color: product.color,
-                pattern: product.pattern,
-                origin: product.origin,
-                prodTime: product.prodTime
-            });
-
-            const rows = [
-                ["Product", "name"],
-                ["Material", "material"],
-                ["Craft", "craft"],
-                ["Color", "color"],
-                ["Pattern", "pattern"],
-                ["Origin", "origin"],
-                ["Production Time", "prodTime"]
-            ];
-
-            const handleSave = () => {
-                setIsEditing(false);
-            };
-
-            return (
-                <ScreenShell>
-                    <ProgressDots step={ 2 } total={ 6 } />
-                    <Header title={ s.productDetailsReady } tagText={ s.aiGeneratedDetails } tagType="ai" onBack={ back } />
-                    <div style={ { borderRadius: 16, overflow: "hidden", marginBottom: 16, height: 140 } }>
-                        <ProductImage size={ 140 } src={ enhancedImageUrl } />
-                    </div>
-                    <div className="card" style={ { marginBottom: 16 } }>
-                        { rows.map(([label, key], i) => (
-                            <div key={ key } style={ { display: "flex", justifyContent: "space-between", padding: "9px 0",
-                                    borderTop: i === 0 ? "none" : "1px solid var(--line)", alignItems: "center" } }>
-                                <span style={ { fontSize: 13, color: "var(--ink-soft)", fontWeight: 700 } }>{ label }</span>
-                                { isEditing ? (
-                                    <input type="text" value={ data[key] } onChange={ e => setData({ ...data, [key]: e
-                                            .target.value }) }
-                                        style={ { width: "55%", textAlign: "right", padding: "6px 10px",
-                                            borderRadius: 10,
-                                            border: "1.5px solid var(--gold)", fontSize: 13.5, fontWeight: 700,
-                                            background: "#FFFDF5" } } />
-                                ) : (
-                                    <span style={ { fontSize: 13.5, fontWeight: 700, textAlign: "right" } }>{ data[key] }</span>
-                                ) }
-                            </div>
-                        )) }
-                    </div>
-                    <div style={ { flex: 1 } }></div>
-                    <div style={ { display: "flex", flexDirection: "column", gap: 10 } }>
-                        { isEditing ? (
-                            <div style={ { display: "flex", gap: 10 } }>
-                                <button className="btn-primary" onClick={ handleSave } style={ { flex: 1 } }>{ s
-                                        .saveChanges }</button>
-                                <button className="btn-secondary" onClick={ () => setIsEditing(false) } style={ { flex: 1 } }>{ s
-                                        .cancel }</button>
-                            </div>
-                        ) : (
-                            <>
-                                <button className="btn-primary" onClick={ () => go("aiDescription") }>{ s
-                                    .looksGood }</button>
-                                <button className="btn-secondary" style={ { display: "flex", alignItems: "center",
-                                        justifyContent: "center", gap: 6 } } onClick={ () => setIsEditing(true) }>
-                                    <Icon name="edit" size={ 15 } /> { s.editDetails }
-                                </button>
-                            </>
-                        ) }
-                    </div>
-                </ScreenShell>
-            );
+        if (timerRef.current) {
+            clearInterval(timerRef.current);
         }
 
-        // ---------- AI DESCRIPTION ----------
-        function AIDescription({ go, back }) {
-            const s = useStrings();
-            const product = useProduct();
-            const [isEditing, setIsEditing] = useState(false);
-            const [desc, setDesc] = useState(product.description);
+        setIsListening(false);
+    };
 
-            const handleSave = () => {
-                setIsEditing(false);
-            };
+    const finishRecording = () => {
+        stopRecording();
 
-            useEffect(() => {
-                const generate = async () => {
-                    try {
-                        // const result = await generateDescription(product);
-                        // setDesc(result.description || product.description);
-                    } catch (e) {
-                        console.warn('API failed, using fallback');
-                    }
-                };
-                generate();
-            }, []);
-
-            return (
-                <ScreenShell>
-                    <ProgressDots step={ 3 } total={ 6 } />
-                    <Header title={ s.productDescription } tagText={ s.aiGeneratedDesc } tagType="ai" onBack={ back } />
-                    <div className="card" style={ { marginBottom: 16 } }>
-                        { isEditing ? (
-                            <textarea className="inline-edit-textarea" value={ desc } onChange={ e => setDesc(e.target
-                                    .value) } rows={ 6 } />
-                        ) : (
-                            <p style={ { margin: 0, fontSize: 14.5, lineHeight: 1.7 } }>{ desc }</p>
-                        ) }
-                    </div>
-                    <div style={ { flex: 1 } }></div>
-                    <div style={ { display: "flex", flexDirection: "column", gap: 10 } }>
-                        { isEditing ? (
-                            <div style={ { display: "flex", gap: 10 } }>
-                                <button className="btn-primary" onClick={ handleSave } style={ { flex: 1 } }>{ s
-                                        .saveDescription }</button>
-                                <button className="btn-secondary" onClick={ () => setIsEditing(false) } style={ { flex: 1 } }>{ s
-                                        .cancel }</button>
-                            </div>
-                        ) : (
-                            <>
-                                <button className="btn-primary" onClick={ () => go("craftStoryIntro") }>{ s
-                                        .useDescription }</button>
-                                <button className="btn-secondary" style={ { display: "flex", alignItems: "center",
-                                        justifyContent: "center", gap: 6 } } onClick={ () => setIsEditing(true) }>
-                                    <Icon name="edit" size={ 15 } /> { s.edit }
-                                </button>
-                            </>
-                        ) }
-                    </div>
-                </ScreenShell>
-            );
+        if (transcript.trim()) {
+            onFinish(transcript.trim());
         }
+    };
 
-        // ---------- CRAFT STORY ----------
-        function CraftStoryIntro({ go, back }) {
-            const s = useStrings();
-            return (
-                <ScreenShell>
-                    <ProgressDots step={ 4 } total={ 6 } />
-                    <Header title={ s.craftStoryIntro } sub={ s.craftStorySub } tagText={ s.aiCraftStoryteller }
-                        tagType="ai" onBack={ back } />
-                    <div style={ { flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
-                            justifyContent: "center", gap: 16 } }>
-                        <img src="meera.png" style={ { width: 110, height: 110, borderRadius: "50%", objectFit: "cover" } } />
-                        <button className="btn-clay" style={ { width: "auto", padding: "14px 26px", display: "flex",
-                                alignItems: "center", gap: 10 } } onClick={ () => go("craftStoryVoice") }>
-                            <Icon name="mic" size={ 18 } color="#fff" /> { s.tapSpeakStory }
-                        </button>
-                    </div>
-                </ScreenShell>
-            );
-        }
+    return {
+        seconds,
+        transcript,
+        isListening,
+        error,
+        startRecording,
+        stopRecording,
+        finishRecording
+    };
+}
 
-        const STORY_LINES_EN = [
-            "My mother taught me bamboo weaving when I was young.",
-            "I have been making these baskets for fourteen years.",
-            "Every basket is made by hand."
-        ];
-        const STORY_LINES_HI = [
-            "मेरी माँ ने मुझे कम उम्र में बाँस बुनाई सिखाई।",
-            "मैं चौदह वर्षों से ये बास्केट बना रही हूँ।",
-            "हर बास्केट हाथ से बनाई जाती है।"
-        ];
 
-        function CraftStoryVoice({ go, back }) {
-            const s = useStrings();
-            const { lang } = useContext(LanguageContext);
-            const lines = lang === "hi" ? STORY_LINES_HI : STORY_LINES_EN;
-            return (
-                <ScreenShell>
-                    <Header title={ s.recordingStory } tagText={ s.aiCraftStoryteller } tagType="ai" onBack={ back } />
-                    <RecordingPanel lines={ lines } onFinish={ () => go("craftStoryProcess") } />
-                </ScreenShell>
-            );
-        }
+// ============================================================
+// VOICE DESCRIPTION
+// ============================================================
 
-        // ---------- CRAFT STORY PROCESS (uses craftStorySteps) ----------
-        function CraftStoryProcess({ go, back }) {
-            const s = useStrings();
-            const steps = s.craftStorySteps || [
-                "Analyzing your story", "Identifying key themes", "Crafting narrative",
-                "Adding emotional depth", "Polishing story", "Finalizing craft story"
-            ];
-            const { lang } = useContext(LanguageContext);
-            const lines = lang === "hi" ? STORY_LINES_HI : STORY_LINES_EN;
+function VoiceDescribe({ go, back, enhancedImageUrl }) {
+    const s = useStrings();
 
-            useEffect(() => {
-                const generate = async () => {
-                    try {
-                        // const result = await generateCraftStory(lines.join(' '));
-                    } catch (e) {
-                        console.warn('API failed, using fallback');
-                    }
-                };
-                generate();
-            }, []);
+    const [phase, setPhase] = useState("idle");
+    const [transcript, setTranscript] = useState("");
 
-            return (
-                <ScreenShell>
-                    <Header title={ s.creatingStory } tagText={ s.aiAtWork } tagType="ai" onBack={ back } />
-                    <div className="card" style={ { marginBottom: 16 } }>
-                        <div className="field-label">{ s.whatMeeraSaid }</div>
-                        <p style={ { margin: 0, fontSize: 14, lineHeight: 1.6, color: "var(--ink-soft)" } }>{ lines
-                            .join(" ") }</p>
-                    </div>
-                    <Checklist items={ steps } onDone={ () => setTimeout(() => go("craftStoryReveal"), 500) } />
-                </ScreenShell>
-            );
-        }
+    const {
+        seconds,
+        transcript: liveTranscript,
+        isListening,
+        error,
+        startRecording,
+        finishRecording
+    } = useRecorder((finalTranscript) => {
+        setTranscript(finalTranscript);
+        setPhase("done");
+    });
 
-        // ---------- CRAFT STORY REVEAL ----------
-        function CraftStoryReveal({ go, back }) {
-            const s = useStrings();
-            const product = useProduct();
-            const [isEditing, setIsEditing] = useState(false);
-            const [story, setStory] = useState(product.story);
+    const handleStart = () => {
+        setTranscript("");
+        setPhase("rec");
+        startRecording();
+    };
 
-            const handleSave = () => {
-                setIsEditing(false);
-            };
+    const handleFinish = () => {
+        finishRecording();
+    };
 
-            return (
-                <ScreenShell>
-                    <ProgressDots step={ 4 } total={ 6 } />
-                    <Header title={ s.meerasCraftStory } tagText={ s.aiGeneratedCraftStory } tagType="ai" onBack={ back } />
-                    <div className="card" style={ { marginBottom: 16, background: "linear-gradient(155deg,#FBF4E6,#F3E7CE)" } }>
-                        <div style={ { display: "flex", gap: 10, alignItems: "center", marginBottom: 10 } }>
-                            <img src="meera.png" style={ { width: 40, height: 40, borderRadius: "50%", objectFit: "cover" } } />
-                            <div style={ { fontWeight: 800, fontSize: 14 } }>{ s.artisanName } · { s.artisanLocation }</div>
-                        </div>
-                        { isEditing ? (
-                            <textarea className="inline-edit-textarea" value={ story } onChange={ e => setStory(e.target
-                                    .value) } rows={ 6 } style={ { fontFamily: "'Fraunces',serif", fontStyle: "italic",
-                                    fontSize: 15.5 } } />
-                        ) : (
-                            <p className="serif" style={ { margin: 0, fontSize: 15.5, lineHeight: 1.7, fontStyle: "italic",
-                                    color: "var(--bamboo-deep)" } }>{ story }</p>
-                        ) }
-                    </div>
-                    <div style={ { flex: 1 } }></div>
-                    <div style={ { display: "flex", flexDirection: "column", gap: 10 } }>
-                        { isEditing ? (
-                            <div style={ { display: "flex", gap: 10 } }>
-                                <button className="btn-primary" onClick={ handleSave } style={ { flex: 1 } }>{ s
-                                        .saveStory }</button>
-                                <button className="btn-secondary" onClick={ () => setIsEditing(false) } style={ { flex: 1 } }>{ s
-                                        .cancel }</button>
-                            </div>
-                        ) : (
-                            <>
-                                <button className="btn-primary" onClick={ () => go("pricingInput") }>{ s
-                                    .addCraftStory }</button>
-                                <div style={ { display: "flex", gap: 10 } }>
-                                    <button className="btn-secondary" style={ { flex: 1 } } onClick={ () => setIsEditing(
-                                        true) }>{ s.editCraftStory }</button>
-                                    <button className="btn-secondary" style={ { flex: 1 } } onClick={ () => go(
-                                        "pricingInput") }>{ s.skipCraftStory }</button>
-                                </div>
-                            </>
-                        ) }
-                    </div>
-                </ScreenShell>
-            );
-        }
+    return (
+        <ScreenShell>
+            <Header
+                title={s.tellProduct}
+                sub={s.tellProductSub}
+                onBack={back}
+            />
 
-        // ---------- PRICING ----------
-        function PricingInput({ go, back }) {
-            const s = useStrings();
-            const [listening, setListening] = useState(false);
-            const [extracted, setExtracted] = useState(null);
-            const [costs, setCosts] = useState({
-                material: "₹450",
-                other: "₹100",
-                time: "3 days"
-            });
+            <div style={{
+                borderRadius: 16,
+                overflow: "hidden",
+                marginBottom: 18,
+                height: 130
+            }}>
+                <ProductImage
+                    size={130}
+                    src={enhancedImageUrl}
+                />
+            </div>
 
-            const handleVoiceExtract = () => {
-                setListening(true);
-                setTimeout(() => {
-                    setListening(false);
-                    setExtracted({
-                        material: "₹450",
-                        other: "₹100",
-                        time: "3 days"
-                    });
-                    setCosts({
-                        material: "₹450",
-                        other: "₹100",
-                        time: "3 days"
-                    });
-                }, 2500);
-            };
-
-            return (
-                <ScreenShell>
-                    <ProgressDots step={ 5 } total={ 6 } />
-                    <Header title={ s.pricingTitle } sub={ s.pricingSub } onBack={ back } />
-                    <div style={ { display: "flex", flexDirection: "column", gap: 14, marginBottom: 16 } }>
-                        { [
-                            [s.materialCost, "material", costs.material],
-                            [s.otherCosts, "other", costs.other],
-                            [s.productionTime, "time", costs.time]
-                        ].map(([label, key, val]) => (
-                            <div key={ key }>
-                                <div className="field-label">{ label }</div>
-                                <input type="text" value={ val } onChange={ e => setCosts({ ...costs, [key]: e.target
-                                        .value }) } style={ { flex: 1 } } />
-                            </div>
-                        )) }
-                    </div>
-                    { extracted && (
-                        <div className="card" style={ { marginBottom: 16, background: "#EEF3E9" } }>
-                            <div className="field-label">{ s.extractedCosts }</div>
-                            <div style={ { fontSize: 14, fontWeight: 600 } }>{ s.materialExtracted }{ costs.material }</div>
-                            <div style={ { fontSize: 14, fontWeight: 600 } }>{ s.otherExtracted }{ costs.other }</div>
-                            <div style={ { fontSize: 14, fontWeight: 600 } }>{ s.timeExtracted }{ costs.time }</div>
-                        </div>
-                    ) }
-                    <button className="card" onClick={ handleVoiceExtract } disabled={ listening } style={ { display: "flex",
-                            gap: 12, alignItems: "center", marginBottom: 16, opacity: listening ? 0.6 : 1 } }>
-                        <div className="mic-btn" style={ { width: 44, height: 44 } }>
-                            { listening && <><span className="mic-pulse" style={ { inset: -8 } }></span></> }
-                            <Icon name="mic" color="#fff" size={ 18 } />
-                        </div>
-                        <div style={ { textAlign: "left" } }>
-                            <div style={ { fontWeight: 700, fontSize: 14 } }>{ listening ? s.listening : s
-                                    .speakCosts }</div>
-                            <div style={ { fontSize: 12.5, color: "var(--ink-soft)" } }>{ listening ?
-                                "Say: material cost 450, other 100, time 3 days" : "Tap to speak your costs" }</div>
-                        </div>
+            {phase === "idle" && (
+                <div style={{
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 16
+                }}>
+                    <button
+                        className="mic-btn"
+                        onClick={handleStart}
+                    >
+                        <Icon
+                            name="mic"
+                            color="#fff"
+                            size={34}
+                        />
                     </button>
 
-                    <div style={ { flex: 1 } }></div>
-                    <button className="btn-primary" onClick={ () => go("pricingProcess") }>{ s.suggestPrice }</button>
-                </ScreenShell>
-            );
-        }
+                    <div style={{
+                        fontWeight: 700,
+                        fontSize: 15
+                    }}>
+                        {s.tapAndSpeak}
+                    </div>
+                </div>
+            )}
 
-        // ---------- PRICING PROCESS ----------
-        function PricingProcess({ go, back }) {
-            const s = useStrings();
-            const steps = [s.step1, s.step2, s.step3, s.step4, s.step5, s.step6];
-            const [done, setDone] = useState(false);
+            {phase === "rec" && (
+                <RecordingPanel
+                    transcript={liveTranscript}
+                    seconds={seconds}
+                    isListening={isListening}
+                    error={error}
+                    onFinish={handleFinish}
+                />
+            )}
 
-            useEffect(() => {
-                const fetchPrice = async () => {
-                    try {
-                        // const result = await getPricing({ materialCost: 450, otherCost: 100 });
-                    } catch (e) {
-                        console.warn('API failed, using fallback');
-                    }
-                    setDone(true);
-                    setTimeout(() => go("pricingReveal"), 500);
+            {phase === "done" && (
+                <div style={{
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center"
+                }}>
+                    <div
+                        className="tag"
+                        style={{ marginBottom: 10 }}
+                    >
+                        {s.recordingComplete}
+                    </div>
+
+                    <div
+                        className="card"
+                        style={{
+                            fontSize: 14.5,
+                            lineHeight: 1.6
+                        }}
+                    >
+                        {transcript}
+                    </div>
+                </div>
+            )}
+
+            <div style={{
+                flex: phase === "idle" ? 0 : 1
+            }}></div>
+
+            {phase === "done" && (
+                <button
+                    className="btn-primary"
+                    onClick={() => {
+                        currentProductTranscript = transcript;
+                        go("understandVoice");
+                    }}
+                >
+                    {s.continue}
+                </button>
+            )}
+        </ScreenShell>
+    );
+}
+
+
+// ============================================================
+// RECORDING PANEL
+// ============================================================
+
+
+function RecordingPanel({
+    transcript = "",
+    seconds = 0,
+    isListening = false,
+    error = "",
+    onFinish
+}) {
+    const s = useStrings();
+
+    const safeTranscript =
+        typeof transcript === "string"
+            ? transcript
+            : "";
+
+    const safeSeconds =
+        typeof seconds === "number" && !Number.isNaN(seconds)
+            ? seconds
+            : 0;
+
+    const mm = String(
+        Math.floor(safeSeconds / 60)
+    ).padStart(2, "0");
+
+    const ss = String(
+        safeSeconds % 60
+    ).padStart(2, "0");
+
+    const hasTranscript = safeTranscript.trim().length > 0;
+
+    return (
+        <div
+            style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                gap: 16
+            }}
+        >
+            <div
+                style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 10
+                }}
+            >
+                <div
+                    className="mic-btn"
+                    style={{
+                        width: 74,
+                        height: 74
+                    }}
+                >
+                    <span className="mic-pulse"></span>
+                    <span className="mic-pulse p2"></span>
+
+                    <Icon
+                        name="mic"
+                        color="#fff"
+                        size={26}
+                    />
+                </div>
+
+                <div
+                    style={{
+                        fontWeight: 800,
+                        fontSize: 13.5,
+                        color: "var(--clay)"
+                    }}
+                >
+                    {isListening
+                        ? s.listening
+                        : "Processing"}{" "}
+                    {mm}:{ss}
+                </div>
+
+                <Waveform />
+            </div>
+
+            <div
+                className="card"
+                style={{
+                    minHeight: 110
+                }}
+            >
+                <div className="field-label">
+                    Live transcript
+                </div>
+
+                <p
+                    style={{
+                        margin: 0,
+                        fontSize: 14.5,
+                        lineHeight: 1.5
+                    }}
+                >
+                    {hasTranscript
+                        ? safeTranscript
+                        : isListening
+                            ? "Listening..."
+                            : "No transcript available"}
+                </p>
+
+                {error && (
+                    <p
+                        style={{
+                            color: "var(--clay)",
+                            fontSize: 13,
+                            marginTop: 10
+                        }}
+                    >
+                        {error}
+                    </p>
+                )}
+            </div>
+
+            <button
+                className="btn-primary"
+                onClick={onFinish}
+                disabled={!hasTranscript}
+            >
+                Done
+            </button>
+        </div>
+    );
+}
+
+
+
+// ============================================================
+// UNDERSTAND VOICE
+// ============================================================
+
+function UnderstandVoice({ go, back }) {
+    const s = useStrings();
+
+    const steps = s.understandingSteps || [
+        "Transcribing audio",
+        "Extracting key details",
+        "Identifying product type",
+        "Structuring information",
+        "Generating product description",
+        "Refining details"
+    ];
+
+    const [done, setDone] = useState(false);
+
+    const transcript = currentProductTranscript || "";
+
+    useEffect(() => {
+        const extract = async () => {
+            try {
+                const result =
+                    await extractProductFromVoice(transcript);
+
+                // Save Gemini result for ProductDetails
+                currentProductData = result;
+
+            } catch (e) {
+                console.warn(
+                    "Gemini API failed, using fallback"
+                );
+
+                // Fallback if API fails
+                currentProductData = {
+                    name: "Bamboo Storage Basket",
+                    material: "Natural Bamboo",
+                    craft: "Handwoven",
+                    color: "",
+                    pattern: "",
+                    origin: "",
+                    prodTime: "3 days",
+                    description: transcript
                 };
-                fetchPrice();
-            }, []);
+            }
 
-            return (
-                <ScreenShell>
-                    <Header title={ s.calculatingPrice } tagText={ s.aiAtWork } tagType="ai" onBack={ back } />
-                    <Checklist items={ steps } speed={ 500 } onDone={ () => {} } />
-                </ScreenShell>
+            setDone(true);
+        };
+
+        extract();
+    }, []);
+
+    return (
+        <ScreenShell>
+            <Header
+                title={s.understandingProduct}
+                tagText={s.aiAtWork}
+                tagType="ai"
+                onBack={back}
+            />
+
+            <div
+                className="card"
+                style={{ marginBottom: 16 }}
+            >
+                <div className="field-label">
+                    {s.whatMeeraSaid}
+                </div>
+
+                <p style={{
+                    margin: 0,
+                    fontSize: 14,
+                    lineHeight: 1.6,
+                    color: "var(--ink-soft)"
+                }}>
+                    {transcript}
+                </p>
+            </div>
+
+            <Checklist
+                items={steps}
+                onDone={() => setDone(true)}
+            />
+
+            <div style={{ flex: 1 }}></div>
+
+            {done && (
+                <button
+                    className="btn-primary"
+                    onClick={() => go("productDetails")}
+                >
+                    {s.continue}
+                </button>
+            )}
+        </ScreenShell>
+    );
+}
+
+
+// ============================================================
+// PRODUCT DETAILS
+// ============================================================
+
+function ProductDetails({ go, back, enhancedImageUrl }) {
+    const s = useStrings();
+
+    // Use Gemini data if available.
+    const product = currentProductData || useProduct();
+
+    const [isEditing, setIsEditing] = useState(false);
+
+    const [data, setData] = useState({
+        name: product.name,
+        material: product.material,
+        craft: product.craft,
+        color: product.color,
+        pattern: product.pattern,
+        origin: product.origin,
+        prodTime: product.prodTime
+    });
+
+    const rows = [
+        ["Product", "name"],
+        ["Material", "material"],
+        ["Craft", "craft"],
+        ["Color", "color"],
+        ["Pattern", "pattern"],
+        ["Origin", "origin"],
+        ["Production Time", "prodTime"]
+    ];
+
+    const handleSave = () => {
+        setIsEditing(false);
+
+        // Keep edited values for the next screen.
+        currentProductData = {
+            ...product,
+            ...data
+        };
+    };
+
+    return (
+        <ScreenShell>
+            <ProgressDots step={2} total={6} />
+
+            <Header
+                title={s.productDetailsReady}
+                tagText={s.aiGeneratedDetails}
+                tagType="ai"
+                onBack={back}
+            />
+
+            <div style={{
+                borderRadius: 16,
+                overflow: "hidden",
+                marginBottom: 16,
+                height: 140
+            }}>
+                <ProductImage
+                    size={140}
+                    src={enhancedImageUrl}
+                />
+            </div>
+
+            <div
+                className="card"
+                style={{ marginBottom: 16 }}
+            >
+                {rows.map(([label, key], i) => (
+                    <div
+                        key={key}
+                        style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            padding: "9px 0",
+                            borderTop: i === 0
+                                ? "none"
+                                : "1px solid var(--line)",
+                            alignItems: "center"
+                        }}
+                    >
+                        <span style={{
+                            fontSize: 13,
+                            color: "var(--ink-soft)",
+                            fontWeight: 700
+                        }}>
+                            {label}
+                        </span>
+
+                        {isEditing ? (
+                            <input
+                                type="text"
+                                value={data[key]}
+                                onChange={e =>
+                                    setData({
+                                        ...data,
+                                        [key]: e.target.value
+                                    })
+                                }
+                                style={{
+                                    width: "55%",
+                                    textAlign: "right",
+                                    padding: "6px 10px",
+                                    borderRadius: 10,
+                                    border: "1.5px solid var(--gold)",
+                                    fontSize: 13.5,
+                                    fontWeight: 700,
+                                    background: "#FFFDF5"
+                                }}
+                            />
+                        ) : (
+                            <span style={{
+                                fontSize: 13.5,
+                                fontWeight: 700,
+                                textAlign: "right"
+                            }}>
+                                {data[key]}
+                            </span>
+                        )}
+                    </div>
+                ))}
+            </div>
+
+            <div style={{ flex: 1 }}></div>
+
+            <div style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 10
+            }}>
+                {isEditing ? (
+                    <div style={{
+                        display: "flex",
+                        gap: 10
+                    }}>
+                        <button
+                            className="btn-primary"
+                            onClick={handleSave}
+                            style={{ flex: 1 }}
+                        >
+                            {s.saveChanges}
+                        </button>
+
+                        <button
+                            className="btn-secondary"
+                            onClick={() => setIsEditing(false)}
+                            style={{ flex: 1 }}
+                        >
+                            {s.cancel}
+                        </button>
+                    </div>
+                ) : (
+                    <>
+                        <button
+                            className="btn-primary"
+                            onClick={() => go("aiDescription")}
+                        >
+                            {s.looksGood}
+                        </button>
+
+                        <button
+                            className="btn-secondary"
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: 6
+                            }}
+                            onClick={() => setIsEditing(true)}
+                        >
+                            <Icon name="edit" size={15} />
+                            {s.editDetails}
+                        </button>
+                    </>
+                )}
+            </div>
+        </ScreenShell>
+    );
+}
+
+
+// ============================================================
+// AI DESCRIPTION
+// ============================================================
+
+function AIDescription({ go, back }) {
+    const s = useStrings();
+
+    const product = currentProductData || useProduct();
+
+    const [isEditing, setIsEditing] = useState(false);
+    const [desc, setDesc] = useState(
+        product.description
+    );
+
+    const handleSave = () => {
+        setIsEditing(false);
+
+        // Save edited description.
+        currentProductData = {
+            ...product,
+            description: desc
+        };
+    };
+
+    useEffect(() => {
+        const generate = async () => {
+            try {
+                const result =
+                    await generateDescription(product);
+
+                setDesc(
+                    result.description || product.description
+                );
+
+            } catch (e) {
+                console.warn(
+                    "Gemini API failed, using fallback"
+                );
+
+                setDesc(product.description);
+            }
+        };
+
+        generate();
+    }, []);
+
+    return (
+        <ScreenShell>
+            <ProgressDots step={3} total={6} />
+
+            <Header
+                title={s.productDescription}
+                tagText={s.aiGeneratedDesc}
+                tagType="ai"
+                onBack={back}
+            />
+
+            <div
+                className="card"
+                style={{ marginBottom: 16 }}
+            >
+                {isEditing ? (
+                    <textarea
+                        className="inline-edit-textarea"
+                        value={desc}
+                        onChange={e =>
+                            setDesc(e.target.value)
+                        }
+                        rows={6}
+                    />
+                ) : (
+                    <p style={{
+                        margin: 0,
+                        fontSize: 14.5,
+                        lineHeight: 1.7
+                    }}>
+                        {Array.isArray(desc)
+                            ? desc.map((point, i) => (
+                                <span
+                                    key={i}
+                                    style={{
+                                        display: "block",
+                                        marginBottom: 8
+                                    }}
+                                >
+                                    • {point}
+                                </span>
+                            ))
+                            : desc}
+                    </p>
+                )}
+            </div>
+
+            <div style={{ flex: 1 }}></div>
+
+            <div style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 10
+            }}>
+                {isEditing ? (
+                    <div style={{
+                        display: "flex",
+                        gap: 10
+                    }}>
+                        <button
+                            className="btn-primary"
+                            onClick={handleSave}
+                            style={{ flex: 1 }}
+                        >
+                            {s.saveDescription}
+                        </button>
+
+                        <button
+                            className="btn-secondary"
+                            onClick={() => setIsEditing(false)}
+                            style={{ flex: 1 }}
+                        >
+                            {s.cancel}
+                        </button>
+                    </div>
+                ) : (
+                    <>
+                        <button
+                            className="btn-primary"
+                            onClick={() => go("craftStoryIntro")}
+                        >
+                            {s.useDescription}
+                        </button>
+
+                        <button
+                            className="btn-secondary"
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: 6
+                            }}
+                            onClick={() => setIsEditing(true)}
+                        >
+                            <Icon name="edit" size={15} />
+                            {s.edit}
+                        </button>
+                    </>
+                )}
+            </div>
+        </ScreenShell>
+    );
+}
+
+
+// ============================================================
+// CRAFT STORY STATE
+// ============================================================
+
+let currentCraftStoryTranscript = "";
+let currentCraftStoryResult = "";
+
+
+// ============================================================
+// CRAFT STORY API
+// ============================================================
+
+async function generateCraftStory(transcript) {
+    const prompt = `
+You are a professional storytelling writer for Indian handicraft artisans.
+
+Convert the artisan's spoken story into a proper, emotional, attractive,
+and authentic craft story suitable for an online marketplace.
+
+Rules:
+- Return ONLY valid JSON.
+- Do not include markdown.
+- Use simple, professional English.
+- Preserve the artisan's original meaning and personal voice.
+- Mention the artisan's journey, inspiration, craftsmanship, and uniqueness
+  only when those details are present in the transcript.
+- Do not invent facts, names, locations, materials, awards, or years.
+- Make the story warm, human, and engaging.
+- Keep it concise.
+- Return one polished paragraph.
+- Do not return an array.
+
+Artisan's spoken story:
+
+${transcript}
+`;
+
+    const text = await callGemini(prompt);
+
+    const cleaned = text
+        .replace(/```json/g, "")
+        .replace(/```/g, "")
+        .trim();
+
+    const result = JSON.parse(cleaned);
+
+    return {
+        story:
+            typeof result.story === "string"
+                ? result.story.trim()
+                : ""
+    };
+}
+
+// ============================================================
+// CRAFT STORY FALLBACK LINES
+// ============================================================
+
+const STORY_LINES_EN = [
+    "My mother taught me bamboo weaving when I was young.",
+    "I have been making these baskets for fourteen years.",
+    "Every basket is made by hand."
+];
+
+const STORY_LINES_HI = [
+    "मेरी माँ ने मुझे कम उम्र में बाँस बुनाई सिखाई।",
+    "मैं चौदह वर्षों से ये बास्केट बना रही हूँ।",
+    "हर बास्केट हाथ से बनाई जाती है।"
+];
+
+
+// ============================================================
+// SPEECH RECOGNITION HELPER
+// ============================================================
+
+function getSpeechRecognition() {
+    return (
+        window.SpeechRecognition ||
+        window.webkitSpeechRecognition
+    );
+}
+
+
+// ============================================================
+// CRAFT STORY INTRO
+// ============================================================
+
+function CraftStoryIntro({ go, back }) {
+    const s = useStrings();
+
+    return (
+        <ScreenShell>
+            <ProgressDots
+                step={4}
+                total={6}
+            />
+
+            <Header
+                title={s.craftStoryIntro}
+                sub={s.craftStorySub}
+                tagText={s.aiCraftStoryteller}
+                tagType="ai"
+                onBack={back}
+            />
+
+            <div
+                style={{
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 16
+                }}
+            >
+                <img
+                    src="meera.png"
+                    style={{
+                        width: 110,
+                        height: 110,
+                        borderRadius: "50%",
+                        objectFit: "cover"
+                    }}
+                />
+
+                <button
+                    className="btn-clay"
+                    style={{
+                        width: "auto",
+                        padding: "14px 26px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10
+                    }}
+                    onClick={() => go("craftStoryVoice")}
+                >
+                    <Icon
+                        name="mic"
+                        size={18}
+                        color="#fff"
+                    />
+
+                    {s.tapSpeakStory}
+                </button>
+            </div>
+        </ScreenShell>
+    );
+}
+
+
+// ============================================================
+// CRAFT STORY VOICE
+// Reuses the existing RecordingPanel component
+// ============================================================
+
+function CraftStoryVoice({ go, back }) {
+    const s = useStrings();
+    const { lang } = useContext(LanguageContext);
+
+    const [transcript, setTranscript] = useState("");
+    const [seconds, setSeconds] = useState(0);
+    const [isListening, setIsListening] = useState(false);
+    const [error, setError] = useState("");
+
+    const recognitionRef = useRef(null);
+    const timerRef = useRef(null);
+
+    const lines =
+        lang === "hi"
+            ? STORY_LINES_HI
+            : STORY_LINES_EN;
+
+    const startListening = () => {
+        const SpeechRecognition = getSpeechRecognition();
+
+        if (!SpeechRecognition) {
+            setError(
+                "Speech recognition is not supported in this browser. Please use Google Chrome."
+            );
+            return;
+        }
+
+        setTranscript("");
+        setSeconds(0);
+        setError("");
+        setIsListening(true);
+
+        const recognition = new SpeechRecognition();
+
+        recognition.lang =
+            lang === "hi"
+                ? "hi-IN"
+                : "en-IN";
+
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 1;
+
+        let finalText = "";
+
+        recognition.onresult = (event) => {
+            let interimText = "";
+
+            for (
+                let i = event.resultIndex;
+                i < event.results.length;
+                i++
+            ) {
+                const result = event.results[i];
+
+                if (result.isFinal) {
+                    finalText += result[0].transcript + " ";
+                } else {
+                    interimText += result[0].transcript;
+                }
+            }
+
+            const combinedText = (
+                finalText + " " + interimText
+            ).trim();
+
+            setTranscript(combinedText);
+        };
+
+        recognition.onerror = (event) => {
+            console.error(
+                "Craft story speech recognition error:",
+                event.error
+            );
+
+            setIsListening(false);
+            clearInterval(timerRef.current);
+
+            if (event.error === "not-allowed") {
+                setError(
+                    "Microphone permission was denied. Please allow microphone access."
+                );
+            } else if (event.error === "no-speech") {
+                setError(
+                    "No speech detected. Please try again."
+                );
+            } else {
+                setError(
+                    "Unable to recognize speech. Please try again."
+                );
+            }
+        };
+
+        recognition.onend = () => {
+            setIsListening(false);
+            clearInterval(timerRef.current);
+        };
+
+        recognitionRef.current = recognition;
+
+        try {
+            recognition.start();
+
+            timerRef.current = setInterval(() => {
+                setSeconds((previous) => previous + 1);
+            }, 1000);
+        } catch (error) {
+            console.error(
+                "Unable to start speech recognition:",
+                error
+            );
+
+            setIsListening(false);
+            clearInterval(timerRef.current);
+
+            setError(
+                "Unable to start microphone. Please try again."
             );
         }
+    };
 
-        // ---------- PRICING REVEAL ----------
-        function PricingReveal({ go, back }) {
-            const s = useStrings();
-            const product = useProduct();
-            const [isEditing, setIsEditing] = useState(false);
-            const [price, setPrice] = useState(product.suggestedPrice);
-            const [rangeLow, setRangeLow] = useState(product.rangeLow);
-            const [rangeHigh, setRangeHigh] = useState(product.rangeHigh);
+    const stopListening = () => {
+        if (recognitionRef.current) {
+            recognitionRef.current.stop();
+        }
 
-            const breakdown = [
-                ["Material", product.materialCost],
-                ["Other costs", product.otherCost],
-                ["Craft effort", 250],
-                ["Market signals", 150]
-            ];
+        clearInterval(timerRef.current);
+        setIsListening(false);
+    };
 
-            const handleSave = () => {
-                setIsEditing(false);
-            };
+    const handleFinish = () => {
+        if (isListening) {
+            stopListening();
+        }
 
-            return (
-                <ScreenShell>
-                    <ProgressDots step={ 5 } total={ 6 } />
-                    <Header title={ s.suggestedPrice } tagText={ s.aiEstimate } onBack={ back } />
-                    <div className="card" style={ { textAlign: "center", marginBottom: 16, padding: 26,
-                            background: "linear-gradient(155deg,#EFF5EA,#F7EFDA)" } }>
-                        <div style={ { fontSize: 13, fontWeight: 700, color: "var(--ink-soft)", marginBottom: 6 } }>{ s
-                                .suggestedPrice }</div>
-                        { isEditing ? (
-                            <div style={ { display: "flex", flexDirection: "column", gap: 10, alignItems: "center" } }>
-                                <input type="number" value={ price } onChange={ e => setPrice(Number(e.target.value)) }
-                                    style={ { width: "60%", textAlign: "center", fontSize: 32, fontWeight: 600,
-                                        padding: "8px 12px", borderRadius: 14, border: "1.5px solid var(--gold)",
-                                        background: "#FFFDF5", fontFamily: "'Fraunces',serif" } } />
-                                <div style={ { display: "flex", gap: 12, fontSize: 13, color: "var(--ink-soft)" } }>
-                                    <span>{ s.suggestedRange } ₹</span>
-                                    <input type="number" value={ rangeLow } onChange={ e => setRangeLow(Number(e.target
-                                            .value)) }
-                                        style={ { width: 70, textAlign: "center", padding: "4px 6px", borderRadius: 8,
-                                            border: "1.5px solid var(--gold)", fontSize: 13, background: "#FFFDF5" } } />
-                                    <span>– ₹</span>
-                                    <input type="number" value={ rangeHigh } onChange={ e => setRangeHigh(Number(e.target
-                                            .value)) }
-                                        style={ { width: 70, textAlign: "center", padding: "4px 6px", borderRadius: 8,
-                                            border: "1.5px solid var(--gold)", fontSize: 13, background: "#FFFDF5" } } />
-                                </div>
-                            </div>
-                        ) : (
-                            <>
-                                <div className="serif" style={ { fontSize: 40, fontWeight: 600,
-                                        color: "var(--bamboo-deep)" } }>₹{ price }</div>
-                                <div style={ { fontSize: 13, color: "var(--ink-soft)", marginTop: 6 } }>{ s
-                                        .suggestedRange } ₹{ rangeLow } – ₹{ rangeHigh }</div>
-                            </>
-                        ) }
-                    </div>
-                    <div className="card" style={ { marginBottom: 16 } }>
-                        <div className="field-label">{ s.howEstimated }</div>
-                        { breakdown.map(([l, v], i) => (
-                            <div key={ l } style={ { display: "flex", justifyContent: "space-between", padding: "8px 0",
-                                    borderTop: i === 0 ? "none" : "1px solid var(--line)" } }>
-                                <span style={ { fontSize: 13.5, color: "var(--ink-soft)" } }>{ l }</span>
-                                <span style={ { fontSize: 13.5, fontWeight: 700 } }>₹{ v }</span>
-                            </div>
-                        )) }
-                    </div>
-                    <div style={ { flex: 1 } }></div>
-                    <div style={ { display: "flex", flexDirection: "column", gap: 10 } }>
-                        { isEditing ? (
-                            <div style={ { display: "flex", gap: 10 } }>
-                                <button className="btn-primary" onClick={ handleSave } style={ { flex: 1 } }>{ s
-                                        .savePrice }</button>
-                                <button className="btn-secondary" onClick={ () => setIsEditing(false) } style={ { flex: 1 } }>{ s
-                                        .cancel }</button>
-                            </div>
-                        ) : (
-                            <>
-                                <button className="btn-primary" onClick={ () => go("finalReview") }>{ s.usePrice }{ price }</button>
-                                <button className="btn-secondary" onClick={ () => setIsEditing(true) }>{ s
-                                        .changePriceLabel }</button>
-                            </>
-                        ) }
-                    </div>
-                </ScreenShell>
+        const cleanTranscript = (
+            transcript || ""
+        ).trim();
+
+        if (!cleanTranscript) {
+            setError(
+                "Please speak your craft story first."
             );
+            return;
         }
 
-        // ---------- FINAL REVIEW ----------
-        function Row({ l, v }) {
-            return <div style={ { display: "flex", justifyContent: "space-between", padding: "7px 0" } }><span style={ {
-                        fontSize: 12.5, color: "var(--ink-soft)", fontWeight: 700 } }>{ l }</span><span style={ {
-                        fontSize: 13, fontWeight: 700 } }>{ v }</span></div>;
-        }
+        currentCraftStoryTranscript = cleanTranscript;
+        currentCraftStoryResult = "";
 
-        function FinalReview({ go, back, enhancedImageUrl }) {
-            const s = useStrings();
-            const product = useProduct();
-            const [isEditing, setIsEditing] = useState(false);
-            const [data, setData] = useState({
-                name: product.name,
-                material: product.material,
-                craft: product.craft,
-                origin: product.origin,
-                prodTime: product.prodTime,
-                stock: product.stock,
-                moq: product.moq,
-                price: product.suggestedPrice
+        go("craftStoryProcess");
+    };
+
+    useEffect(() => {
+        startListening();
+
+        return () => {
+            if (recognitionRef.current) {
+                recognitionRef.current.stop();
+            }
+
+            clearInterval(timerRef.current);
+        };
+    }, []);
+
+    const minutes = String(
+        Math.floor(seconds / 60)
+    ).padStart(2, "0");
+
+    const remainingSeconds = String(
+        seconds % 60
+    ).padStart(2, "0");
+
+    return (
+        <ScreenShell>
+            <Header
+                title={s.recordingStory}
+                tagText={s.aiCraftStoryteller}
+                tagType="ai"
+                onBack={back}
+            />
+
+            <div
+                style={{
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 16
+                }}
+            >
+                <RecordingPanel
+                    lines={lines}
+                    onFinish={handleFinish}
+                />
+
+                <div
+                    className="card"
+                    style={{
+                        marginTop: -8
+                    }}
+                >
+                    <div className="field-label">
+                        Live transcript
+                    </div>
+
+                    <p
+                        style={{
+                            margin: 0,
+                            fontSize: 14.5,
+                            lineHeight: 1.5
+                        }}
+                    >
+                        {transcript || "Listening..."}
+                    </p>
+
+                    <div
+                        style={{
+                            marginTop: 10,
+                            fontSize: 13,
+                            color: "var(--clay)",
+                            fontWeight: 700
+                        }}
+                    >
+                        {isListening
+                            ? `${s.listening || "Listening"} ${minutes}:${remainingSeconds}`
+                            : "Processing"}
+                    </div>
+
+                    {error && (
+                        <p
+                            style={{
+                                color: "var(--clay)",
+                                fontSize: 13,
+                                marginTop: 10,
+                                marginBottom: 0
+                            }}
+                        >
+                            {error}
+                        </p>
+                    )}
+                </div>
+
+                <button
+                    className="btn-primary"
+                    onClick={handleFinish}
+                    disabled={!(transcript || "").trim()}
+                >
+                    Done
+                </button>
+            </div>
+        </ScreenShell>
+    );
+}
+
+
+// ============================================================
+// CRAFT STORY PROCESS
+// Sends speech transcript to Gemini through your API
+// ============================================================
+
+function CraftStoryProcess({ go, back }) {
+    const s = useStrings();
+
+    const [storyText, setStoryText] = useState(
+        currentCraftStoryTranscript || ""
+    );
+
+    const [apiError, setApiError] = useState("");
+
+    const steps = s.craftStorySteps || [
+        "Analyzing your story",
+        "Identifying key themes",
+        "Crafting narrative",
+        "Adding emotional depth",
+        "Polishing story",
+        "Finalizing craft story"
+    ];
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const generate = async () => {
+            const transcript = (
+                currentCraftStoryTranscript || ""
+            ).trim();
+
+            if (!transcript) {
+                if (isMounted) {
+                    setApiError(
+                        "No story transcript was found."
+                    );
+                }
+                return;
+            }
+
+            try {
+                const result = await generateCraftStory(
+                    transcript
+                );
+
+                let generatedStory = "";
+
+                if (typeof result === "string") {
+                    generatedStory = result;
+                } else if (
+                    result &&
+                    typeof result === "object"
+                ) {
+                    generatedStory =
+                        result.story ||
+                        result.craftStory ||
+                        result.description ||
+                        result.text ||
+                        "";
+                }
+
+                if (
+                    typeof generatedStory !== "string" ||
+                    !generatedStory.trim()
+                ) {
+                    throw new Error(
+                        "The API returned an empty story."
+                    );
+                }
+
+                currentCraftStoryResult =
+                    generatedStory.trim();
+
+                if (isMounted) {
+                    setStoryText(
+                        generatedStory.trim()
+                    );
+                }
+            } catch (error) {
+                console.error(
+                    "Craft story API failed:",
+                    error
+                );
+
+                // Fallback to the original transcript
+                currentCraftStoryResult = transcript;
+
+                if (isMounted) {
+                    setStoryText(transcript);
+
+                    setApiError(
+                        "AI generation failed. Your original story will be used."
+                    );
+                }
+            }
+        };
+
+        generate();
+
+        return () => {
+            isMounted = false;
+        };
+    }, []);
+
+    return (
+        <ScreenShell>
+            <Header
+                title={s.creatingStory}
+                tagText={s.aiAtWork}
+                tagType="ai"
+                onBack={back}
+            />
+
+            <div
+                className="card"
+                style={{
+                    marginBottom: 16
+                }}
+            >
+                <div className="field-label">
+                    {s.whatMeeraSaid}
+                </div>
+
+                <p
+                    style={{
+                        margin: 0,
+                        fontSize: 14,
+                        lineHeight: 1.6,
+                        color: "var(--ink-soft)"
+                    }}
+                >
+                    {storyText || "Processing story..."}
+                </p>
+
+                {apiError && (
+                    <p
+                        style={{
+                            marginTop: 10,
+                            marginBottom: 0,
+                            fontSize: 13,
+                            color: "var(--clay)"
+                        }}
+                    >
+                        {apiError}
+                    </p>
+                )}
+            </div>
+
+            <Checklist
+                items={steps}
+                onDone={() => {
+                    setTimeout(() => {
+                        go("craftStoryReveal");
+                    }, 500);
+                }}
+            />
+        </ScreenShell>
+    );
+}
+
+
+// ============================================================
+// CRAFT STORY REVEAL
+// Displays the Gemini-generated story
+// ============================================================
+
+function CraftStoryReveal({ go, back }) {
+    const s = useStrings();
+    const product = useProduct();
+
+    const [isEditing, setIsEditing] = useState(false);
+
+    const [story, setStory] = useState(
+        currentCraftStoryResult ||
+        currentCraftStoryTranscript ||
+        product.story ||
+        ""
+    );
+
+    const handleSave = () => {
+        currentCraftStoryResult = story;
+        setIsEditing(false);
+    };
+
+    return (
+        <ScreenShell>
+            <ProgressDots
+                step={4}
+                total={6}
+            />
+
+            <Header
+                title={s.meerasCraftStory}
+                tagText={s.aiGeneratedCraftStory}
+                tagType="ai"
+                onBack={back}
+            />
+
+            <div
+                className="card"
+                style={{
+                    marginBottom: 16,
+                    background:
+                        "linear-gradient(155deg,#FBF4E6,#F3E7CE)"
+                }}
+            >
+                <div
+                    style={{
+                        display: "flex",
+                        gap: 10,
+                        alignItems: "center",
+                        marginBottom: 10
+                    }}
+                >
+                    <img
+                        src="meera.png"
+                        style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: "50%",
+                            objectFit: "cover"
+                        }}
+                    />
+
+                    <div
+                        style={{
+                            fontWeight: 800,
+                            fontSize: 14
+                        }}
+                    >
+                        {s.artisanName} · {s.artisanLocation}
+                    </div>
+                </div>
+
+                {isEditing ? (
+                    <textarea
+                        className="inline-edit-textarea"
+                        value={story}
+                        onChange={(e) =>
+                            setStory(e.target.value)
+                        }
+                        rows={6}
+                        style={{
+                            fontFamily:
+                                "'Fraunces',serif",
+                            fontStyle: "italic",
+                            fontSize: 15.5
+                        }}
+                    />
+                ) : (
+                    <p
+                        className="serif"
+                        style={{
+                            margin: 0,
+                            fontSize: 15.5,
+                            lineHeight: 1.7,
+                            fontStyle: "italic",
+                            color: "var(--bamboo-deep)"
+                        }}
+                    >
+                        {story}
+                    </p>
+                )}
+            </div>
+
+            <div
+                style={{
+                    flex: 1
+                }}
+            ></div>
+
+            <div
+                style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10
+                }}
+            >
+                {isEditing ? (
+                    <div
+                        style={{
+                            display: "flex",
+                            gap: 10
+                        }}
+                    >
+                        <button
+                            className="btn-primary"
+                            onClick={handleSave}
+                            style={{
+                                flex: 1
+                            }}
+                        >
+                            {s.saveStory}
+                        </button>
+
+                        <button
+                            className="btn-secondary"
+                            onClick={() =>
+                                setIsEditing(false)
+                            }
+                            style={{
+                                flex: 1
+                            }}
+                        >
+                            {s.cancel}
+                        </button>
+                    </div>
+                ) : (
+                    <>
+                        <button
+                            className="btn-primary"
+                            onClick={() =>
+                                go("pricingInput")
+                            }
+                        >
+                            {s.addCraftStory}
+                        </button>
+
+                        <div
+                            style={{
+                                display: "flex",
+                                gap: 10
+                            }}
+                        >
+                            <button
+                                className="btn-secondary"
+                                style={{
+                                    flex: 1
+                                }}
+                                onClick={() =>
+                                    setIsEditing(true)
+                                }
+                            >
+                                {s.editCraftStory}
+                            </button>
+
+                            <button
+                                className="btn-secondary"
+                                style={{
+                                    flex: 1
+                                }}
+                                onClick={() =>
+                                    go("pricingInput")
+                                }
+                            >
+                                {s.skipCraftStory}
+                            </button>
+                        </div>
+                    </>
+                )}
+            </div>
+        </ScreenShell>
+    );
+}
+
+// ---------- PRICING ----------
+function PricingInput({ go, back }) {
+    const s = useStrings();
+    const product = useProduct();
+
+    const [listening, setListening] = useState(false);
+    const [extracted, setExtracted] = useState(null);
+
+    const [costs, setCosts] = useState({
+        material: product.materialCost
+            ? `₹${product.materialCost}`
+            : "₹450",
+        other: product.otherCost
+            ? `₹${product.otherCost}`
+            : "₹100",
+        time: product.prodTime || "3 days"
+    });
+
+    const handleVoiceExtract = () => {
+        setListening(true);
+
+        setTimeout(() => {
+            setListening(false);
+
+            setExtracted({
+                material: costs.material,
+                other: costs.other,
+                time: costs.time
             });
 
-            const handleSave = () => {
-                setIsEditing(false);
-            };
+            setCosts({
+                material: costs.material,
+                other: costs.other,
+                time: costs.time
+            });
+        }, 2500);
+    };
 
-            const fields = [
-                ["Name", "name"],
-                ["Material", "material"],
-                ["Craft", "craft"],
-                ["Origin", "origin"],
-                ["Production", "prodTime"],
-                ["Stock", "stock"],
-                ["MOQ", "moq"]
-            ];
+    return (
+        <ScreenShell>
+            <ProgressDots step={5} total={6} />
 
-            return (
-                <ScreenShell>
-                    <ProgressDots step={ 6 } total={ 6 } />
-                    <Header title={ s.reviewListing } sub={ s.reviewSub } onBack={ back } />
-                    <div className="card" style={ { marginBottom: 14, padding: 0, overflow: "hidden" } }>
-                        <div style={ { height: 150 } }><ProductImage size={ 150 } src={ enhancedImageUrl } /></div>
-                        <div style={ { padding: 16 } }>
-                            { isEditing ? (
-                                <input type="text" value={ data.name } onChange={ e => setData({ ...data, name: e.target
-                                        .value }) }
-                                    style={ { fontSize: 17, fontWeight: 800, width: "100%",
-                                        border: "1.5px solid var(--gold)",
-                                        borderRadius: 10, padding: "6px 10px", marginBottom: 6,
-                                    background: "#FFFDF5" } } />
-                            ) : (
-                                <div style={ { fontWeight: 800, fontSize: 17, marginBottom: 2 } }>{ data.name }</div>
-                            ) }
-                            { isEditing ? (
-                                <input type="number" value={ data.price } onChange={ e => setData({ ...data, price: Number(e
-                                        .target.value) }) }
-                                    style={ { fontSize: 22, fontWeight: 600, width: "50%",
-                                        border: "1.5px solid var(--gold)",
-                                        borderRadius: 10, padding: "4px 10px", marginBottom: 10,
-                                        background: "#FFFDF5",
-                                        fontFamily: "'Fraunces',serif", color: "var(--bamboo-deep)" } } />
-                            ) : (
-                                <div className="serif" style={ { fontSize: 22, fontWeight: 600,
-                                        color: "var(--bamboo-deep)", marginBottom: 10 } }>₹{ data.price }</div>
-                            ) }
-                            { fields.map(([label, key]) => (
-                                <div key={ key } style={ { display: "flex", justifyContent: "space-between",
-                                        padding: "7px 0",
-                                        borderTop: "1px solid var(--line)" } }>
-                                    <span style={ { fontSize: 12.5, color: "var(--ink-soft)", fontWeight: 700 } }>{ label }</span>
-                                    { isEditing ? (
-                                        <input type="text" value={ data[key] } onChange={ e => setData({ ...data, [key]: e
-                                                .target.value }) }
-                                            style={ { width: "50%", textAlign: "right", padding: "4px 8px",
-                                                borderRadius: 8,
-                                                border: "1.5px solid var(--gold)", fontSize: 13, fontWeight: 700,
-                                                background: "#FFFDF5" } } />
-                                    ) : (
-                                        <span style={ { fontSize: 13, fontWeight: 700 } }>{ data[key] }</span>
-                                    ) }
-                                </div>
-                            )) }
+            <Header
+                title={s.pricingTitle}
+                sub={s.pricingSub}
+                onBack={back}
+            />
+
+            <div
+                style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 14,
+                    marginBottom: 16
+                }}
+            >
+                {[
+                    [s.materialCost, "material", costs.material],
+                    [s.otherCosts, "other", costs.other],
+                    [s.productionTime, "time", costs.time]
+                ].map(([label, key, val]) => (
+                    <div key={key}>
+                        <div className="field-label">{label}</div>
+
+                        <input
+                            type="text"
+                            value={val}
+                            onChange={e =>
+                                setCosts({
+                                    ...costs,
+                                    [key]: e.target.value
+                                })
+                            }
+                            style={{ flex: 1 }}
+                        />
+                    </div>
+                ))}
+            </div>
+
+            {extracted && (
+                <div
+                    className="card"
+                    style={{
+                        marginBottom: 16,
+                        background: "#EEF3E9"
+                    }}
+                >
+                    <div className="field-label">
+                        {s.extractedCosts}
+                    </div>
+
+                    <div
+                        style={{
+                            fontSize: 14,
+                            fontWeight: 600
+                        }}
+                    >
+                        {s.materialExtracted}
+                        {costs.material}
+                    </div>
+
+                    <div
+                        style={{
+                            fontSize: 14,
+                            fontWeight: 600
+                        }}
+                    >
+                        {s.otherExtracted}
+                        {costs.other}
+                    </div>
+
+                    <div
+                        style={{
+                            fontSize: 14,
+                            fontWeight: 600
+                        }}
+                    >
+                        {s.timeExtracted}
+                        {costs.time}
+                    </div>
+                </div>
+            )}
+
+            <button
+                className="card"
+                onClick={handleVoiceExtract}
+                disabled={listening}
+                style={{
+                    display: "flex",
+                    gap: 12,
+                    alignItems: "center",
+                    marginBottom: 16,
+                    opacity: listening ? 0.6 : 1
+                }}
+            >
+                <div
+                    className="mic-btn"
+                    style={{
+                        width: 44,
+                        height: 44
+                    }}
+                >
+                    {listening && (
+                        <>
+                            <span
+                                className="mic-pulse"
+                                style={{ inset: -8 }}
+                            ></span>
+                        </>
+                    )}
+
+                    <Icon
+                        name="mic"
+                        color="#fff"
+                        size={18}
+                    />
+                </div>
+
+                <div style={{ textAlign: "left" }}>
+                    <div
+                        style={{
+                            fontWeight: 700,
+                            fontSize: 14
+                        }}
+                    >
+                        {listening
+                            ? s.listening
+                            : s.speakCosts}
+                    </div>
+
+                    <div
+                        style={{
+                            fontSize: 12.5,
+                            color: "var(--ink-soft)"
+                        }}
+                    >
+                        {listening
+                            ? "Say: material cost 450, other 100, time 3 days"
+                            : "Tap to speak your costs"}
+                    </div>
+                </div>
+            </button>
+
+            <div style={{ flex: 1 }}></div>
+
+            <button
+                className="btn-primary"
+                onClick={() => go("pricingProcess")}
+            >
+                {s.suggestPrice}
+            </button>
+        </ScreenShell>
+    );
+}
+
+
+// ---------- PRICING PROCESS ----------
+function PricingProcess({ go, back }) {
+    const s = useStrings();
+    const product = useProduct();
+
+    const steps = [
+        s.step1,
+        s.step2,
+        s.step3,
+        s.step4,
+        s.step5,
+        s.step6
+    ];
+
+    const [done, setDone] = useState(false);
+
+    useEffect(() => {
+        const fetchPrice = async () => {
+            try {
+                /*
+                Example API usage if required later:
+
+                const result = await getPricing({
+                    productName: product.name,
+                    material: product.material,
+                    craft: product.craft,
+                    materialCost: product.materialCost,
+                    otherCost: product.otherCost,
+                    productionTime: product.prodTime,
+                    description: product.description,
+                    story: product.story
+                });
+                */
+            } catch (e) {
+                console.warn("API failed, using fallback");
+            }
+
+            setDone(true);
+
+            setTimeout(() => {
+                go("pricingReveal");
+            }, 500);
+        };
+
+        fetchPrice();
+    }, []);
+
+    return (
+        <ScreenShell>
+            <Header
+                title={s.calculatingPrice}
+                tagText={s.aiAtWork}
+                tagType="ai"
+                onBack={back}
+            />
+
+            <Checklist
+                items={steps}
+                speed={500}
+                onDone={() => {}}
+            />
+        </ScreenShell>
+    );
+}
+
+
+// ---------- PRICING REVEAL ----------
+function PricingReveal({ go, back }) {
+    const s = useStrings();
+    const product = useProduct();
+
+    const [isEditing, setIsEditing] = useState(false);
+
+    const [price, setPrice] = useState(
+        product.suggestedPrice || 950
+    );
+
+    const [rangeLow, setRangeLow] = useState(
+        product.rangeLow || 850
+    );
+
+    const [rangeHigh, setRangeHigh] = useState(
+        product.rangeHigh || 1100
+    );
+
+    const breakdown = [
+        [
+            s.materialCost || "Material",
+            product.materialCost || 450
+        ],
+        [
+            s.otherCosts || "Other costs",
+            product.otherCost || 100
+        ],
+        [
+            "Craft effort",
+            250
+        ],
+        [
+            "Market signals",
+            150
+        ]
+    ];
+
+    const handleSave = () => {
+        setIsEditing(false);
+    };
+
+    return (
+        <ScreenShell>
+            <ProgressDots step={5} total={6} />
+
+            <Header
+                title={s.suggestedPrice}
+                tagText={s.aiEstimate}
+                onBack={back}
+            />
+
+            <div
+                className="card"
+                style={{
+                    textAlign: "center",
+                    marginBottom: 16,
+                    padding: 26,
+                    background:
+                        "linear-gradient(155deg,#EFF5EA,#F7EFDA)"
+                }}
+            >
+                <div
+                    style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: "var(--ink-soft)",
+                        marginBottom: 6
+                    }}
+                >
+                    {s.suggestedPrice}
+                </div>
+
+                {isEditing ? (
+                    <div
+                        style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 10,
+                            alignItems: "center"
+                        }}
+                    >
+                        <input
+                            type="number"
+                            value={price}
+                            onChange={e =>
+                                setPrice(
+                                    Number(e.target.value)
+                                )
+                            }
+                            style={{
+                                width: "60%",
+                                textAlign: "center",
+                                fontSize: 32,
+                                fontWeight: 600,
+                                padding: "8px 12px",
+                                borderRadius: 14,
+                                border:
+                                    "1.5px solid var(--gold)",
+                                background: "#FFFDF5",
+                                fontFamily:
+                                    "'Fraunces',serif"
+                            }}
+                        />
+
+                        <div
+                            style={{
+                                display: "flex",
+                                gap: 12,
+                                fontSize: 13,
+                                color: "var(--ink-soft)"
+                            }}
+                        >
+                            <span>
+                                {s.suggestedRange} ₹
+                            </span>
+
+                            <input
+                                type="number"
+                                value={rangeLow}
+                                onChange={e =>
+                                    setRangeLow(
+                                        Number(e.target.value)
+                                    )
+                                }
+                                style={{
+                                    width: 70,
+                                    textAlign: "center",
+                                    padding: "4px 6px",
+                                    borderRadius: 8,
+                                    border:
+                                        "1.5px solid var(--gold)",
+                                    fontSize: 13,
+                                    background: "#FFFDF5"
+                                }}
+                            />
+
+                            <span>– ₹</span>
+
+                            <input
+                                type="number"
+                                value={rangeHigh}
+                                onChange={e =>
+                                    setRangeHigh(
+                                        Number(e.target.value)
+                                    )
+                                }
+                                style={{
+                                    width: 70,
+                                    textAlign: "center",
+                                    padding: "4px 6px",
+                                    borderRadius: 8,
+                                    border:
+                                        "1.5px solid var(--gold)",
+                                    fontSize: 13,
+                                    background: "#FFFDF5"
+                                }}
+                            />
                         </div>
                     </div>
-                    <div className="card" style={ { marginBottom: 14 } }>
-                        <div className="field-label">{ s.description }</div>
-                        { isEditing ? (
-                            <textarea className="inline-edit-textarea" value={ product.description }
-                                onChange={ e => { /* would update in real app */ } } rows={ 3 } />
-                        ) : (
-                            <p style={ { margin: 0, fontSize: 13.5, lineHeight: 1.6, color: "var(--ink-soft)" } }>{ product
-                                    .description }</p>
-                        ) }
-                    </div>
-                    <div className="card" style={ { marginBottom: 14 } }>
-                        <div className="field-label">{ s.craftStory }</div>
-                        { isEditing ? (
-                            <textarea className="inline-edit-textarea" value={ product.story }
-                                onChange={ e => { /* would update in real app */ } } rows={ 3 } />
-                        ) : (
-                            <p style={ { margin: 0, fontSize: 13.5, lineHeight: 1.6, color: "var(--ink-soft)" } }>{ product
-                                    .story }</p>
-                        ) }
-                    </div>
-                    <div className="tag ai" style={ { marginBottom: 16 } }><Icon name="sparkle" size={ 13 } /> { s
-                            .createdWithAI }</div>
-                    <div style={ { flex: 1 } }></div>
-                    <div style={ { display: "flex", flexDirection: "column", gap: 10 } }>
-                        { isEditing ? (
-                            <div style={ { display: "flex", gap: 10 } }>
-                                <button className="btn-primary" onClick={ handleSave } style={ { flex: 1 } }>{ s
-                                        .saveChanges }</button>
-                                <button className="btn-secondary" onClick={ () => setIsEditing(false) } style={ { flex: 1 } }>{ s
-                                        .cancel }</button>
-                            </div>
-                        ) : (
-                            <>
-                                <button className="btn-primary" onClick={ () => go("publishing") }>{ s
-                                    .publishProduct }</button>
-                                <button className="btn-secondary" onClick={ () => setIsEditing(true) }>{ s.edit }</button>
-                            </>
-                        ) }
-                    </div>
-                </ScreenShell>
-            );
-        }
+                ) : (
+                    <>
+                        <div
+                            className="serif"
+                            style={{
+                                fontSize: 40,
+                                fontWeight: 600,
+                                color: "var(--bamboo-deep)"
+                            }}
+                        >
+                            ₹{price}
+                        </div>
 
-        // ---------- PUBLISHING (uses listingSteps) ----------
-        function Publishing({ go, back, onPublishDone, enhancedImageUrl }) {
-            const s = useStrings();
-            const steps = s.listingSteps || [
-                "Preparing product data", "Generating thumbnail", "Creating product page",
-                "Checking listing quality", "Optimizing for search", "Finalizing your listing"
-            ];
-            const [done, setDone] = useState(false);
+                        <div
+                            style={{
+                                fontSize: 13,
+                                color: "var(--ink-soft)",
+                                marginTop: 6
+                            }}
+                        >
+                            {s.suggestedRange} ₹{rangeLow} – ₹
+                            {rangeHigh}
+                        </div>
+                    </>
+                )}
+            </div>
 
-            useEffect(() => {
-                if (done) {
-                    onPublishDone();
-                }
-            }, [done]);
+            <div
+                className="card"
+                style={{ marginBottom: 16 }}
+            >
+                <div className="field-label">
+                    {s.howEstimated}
+                </div>
 
-            return (
-                <ScreenShell>
-                    <Header title={ s.preparingListing } onBack={ back } />
-                    <div style={ { flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" } }>
-                        { !done ? (
-                            <>
-                                <div style={ { display: "flex", justifyContent: "center", marginBottom: 10 } }>
-                                    <div style={ { height: 110 } }><ProductImage size={ 110 } src={ enhancedImageUrl } /></div>
-                                </div>
-                                <Checklist items={ steps } speed={ 480 } onDone={ () => setDone(true) } />
-                            </>
-                        ) : (
-                            <div style={ { textAlign: "center" } }>
-                                <div style={ { width: 74, height: 74, borderRadius: "50%", background: "var(--ok)",
-                                        display: "flex", alignItems: "center", justifyContent: "center",
-                                        margin: "0 auto 18px" } }><Icon name="check" size={ 34 } color="#fff" /></div>
-                                <h1 className="serif" style={ { fontSize: 24, fontWeight: 600, marginBottom: 8 } }>{ s
-                                        .productLive }</h1>
-                                <p style={ { color: "var(--ink-soft)", fontSize: 14 } }>{ s.buyersCanDiscover }</p>
-                            </div>
-                        ) }
-                    </div>
-                    { done && <button className="btn-primary" onClick={ () => go("live") }>{ s.continue }</button> }
-                </ScreenShell>
-            );
-        }
+                {breakdown.map(([l, v], i) => (
+                    <div
+                        key={l}
+                        style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            padding: "8px 0",
+                            borderTop:
+                                i === 0
+                                    ? "none"
+                                    : "1px solid var(--line)"
+                        }}
+                    >
+                        <span
+                            style={{
+                                fontSize: 13.5,
+                                color: "var(--ink-soft)"
+                            }}
+                        >
+                            {l}
+                        </span>
 
-        // ---------- LIVE LISTING ----------
-        function LiveListing({ go, back, enhancedImageUrl }) {
-            const s = useStrings();
-            const product = useProduct();
-            return (
-                <ScreenShell>
-                    <Header title={ product.name } tagText={ s.live } tagType="live" onBack={ back } />
-                    <div style={ { borderRadius: 16, overflow: "hidden", marginBottom: 16, height: 160 } }>
-                        <ProductImage size={ 160 } src={ enhancedImageUrl } />
+                        <span
+                            style={{
+                                fontSize: 13.5,
+                                fontWeight: 700
+                            }}
+                        >
+                            ₹{v}
+                        </span>
                     </div>
-                    <div className="serif" style={ { fontSize: 26, fontWeight: 600, color: "var(--bamboo-deep)",
-                            marginBottom: 14 } }>₹{ product.suggestedPrice }</div>
-                    <div style={ { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 } }>
-                        { [
-                            ["Stock", "12"],
-                            ["Views", "0"],
-                            ["Enquiries", "0"]
-                        ].map(([l, v]) => (
-                            <div key={ l } className="card" style={ { textAlign: "center", padding: 14 } }>
-                                <div style={ { fontWeight: 800, fontSize: 17 } }>{ v }</div>
-                                <div style={ { fontSize: 11, color: "var(--ink-soft)", fontWeight: 700 } }>{ l }</div>
-                            </div>
-                        )) }
-                    </div>
-                    <div style={ { flex: 1 } }></div>
-                    <button className="btn-primary" onClick={ () => go("buyerMatch") }>{ s.findBuyers }</button>
-                </ScreenShell>
-            );
-        }
+                ))}
+            </div>
 
-        // ---------- BUYER MATCH ----------
-        function BuyerMatch({ go, back }) {
-            const s = useStrings();
-            return (
-                <ScreenShell>
-                    <Header title={ s.foundBuyers } sub={ s.foundBuyersSub } onBack={ back } />
-                    <div style={ { display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 } }>
-                        <BuyerCard name={ s.buyer1Name } match={ 94 } matchLabel={ s.buyer1Match } color="var(--bamboo)"
-                            onClick={ () => go("buyerDetail") } />
-                        <BuyerCard name={ s.buyer2Name } match={ 88 } matchLabel={ s.buyer2Match } color="var(--clay)" />
-                        <BuyerCard name={ s.buyer3Name } match={ 84 } matchLabel={ s.buyer3Match } color="var(--teal)" />
-                    </div>
-                    <div className="card" style={ { marginBottom: 16 } }>
-                        <div className="field-label">{ s.whyBuyer }</div>
-                        { [s.interestedIn, s.lookingFor, s.targetPrice, s.interestedInCrafts].map(t => (
-                            <div key={ t } style={ { display: "flex", gap: 8, alignItems: "flex-start", padding: "6px 0" } }>
-                                <Icon name="check" size={ 15 } color="var(--ok)" /><span style={ { fontSize: 13.5 } }>{ t }</span>
-                            </div>
-                        )) }
-                    </div>
-                    <div style={ { flex: 1 } }></div>
-                    <button className="btn-primary" onClick={ () => go("buyerDetail") }>{ s.viewBestMatch }</button>
-                </ScreenShell>
-            );
-        }
+            <div style={{ flex: 1 }}></div>
 
-        // ---------- BUYER DETAIL ----------
-        function BuyerDetail({ go, back }) {
-            const s = useStrings();
-            const [sent, setSent] = useState(false);
-            const [isEditing, setIsEditing] = useState(false);
-            const [message, setMessage] = useState(
-                "Namaste. Thank you for your interest in my handmade bamboo baskets. I can provide 5 pieces at ₹950 each. Please let me know if you would like to discuss the order."
-            );
+            <div
+                style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10
+                }}
+            >
+                {isEditing ? (
+                    <div
+                        style={{
+                            display: "flex",
+                            gap: 10
+                        }}
+                    >
+                        <button
+                            className="btn-primary"
+                            onClick={handleSave}
+                            style={{ flex: 1 }}
+                        >
+                            {s.savePrice}
+                        </button>
 
-            const handleSend = () => {
-                setSent(true);
-                setIsEditing(false);
-            };
+                        <button
+                            className="btn-secondary"
+                            onClick={() =>
+                                setIsEditing(false)
+                            }
+                            style={{ flex: 1 }}
+                        >
+                            {s.cancel}
+                        </button>
+                    </div>
+                ) : (
+                    <>
+                        <button
+                            className="btn-primary"
+                            onClick={() =>
+                                go("finalReview")
+                            }
+                        >
+                            {s.usePrice}
+                            {price}
+                        </button>
 
-            return (
-                <ScreenShell>
-                    <Header title={ s.buyerDetailTitle } tagText={ s.matchTag } onBack={ back } />
-                    <div className="card" style={ { marginBottom: 16 } }>
-                        <div style={ { fontWeight: 700, fontSize: 14.5, marginBottom: 4 } }>{ s.interestedQty }</div>
-                        <div style={ { fontSize: 13, color: "var(--ink-soft)" } }>{ s.expectedPrice }</div>
-                    </div>
-                    <div className="tag ai" style={ { marginBottom: 10 } }><Icon name="sparkle" size={ 13 } /> { s
-                            .suggestedReply }</div>
-                    <div className="card" style={ { marginBottom: 16 } }>
-                        { isEditing ? (
-                            <textarea className="inline-edit-textarea" value={ message } onChange={ e => setMessage(e.target
-                                    .value) } rows={ 5 } />
-                        ) : (
-                            <p style={ { margin: 0, fontSize: 14, lineHeight: 1.6 } }>{ message }</p>
-                        ) }
-                    </div>
-                    <div style={ { flex: 1 } }></div>
-                    { !sent ? (
-                        <div style={ { display: "flex", flexDirection: "column", gap: 10 } }>
-                            { isEditing ? (
-                                <div style={ { display: "flex", gap: 10 } }>
-                                    <button className="btn-primary" onClick={ handleSend } style={ { flex: 1 } }><Icon
-                                            name="send" size={ 16 } color="#fff" /> { s.send }</button>
-                                    <button className="btn-secondary" onClick={ () => setIsEditing(false) } style={ { flex: 1 } }>{ s
-                                            .cancel }</button>
-                                </div>
+                        <button
+                            className="btn-secondary"
+                            onClick={() =>
+                                setIsEditing(true)
+                            }
+                        >
+                            {s.changePriceLabel}
+                        </button>
+                    </>
+                )}
+            </div>
+        </ScreenShell>
+    );
+}
+
+
+// ---------- FINAL REVIEW ----------
+function Row({ l, v }) {
+    return (
+        <div
+            style={{
+                display: "flex",
+                justifyContent: "space-between",
+                padding: "7px 0"
+            }}
+        >
+            <span
+                style={{
+                    fontSize: 12.5,
+                    color: "var(--ink-soft)",
+                    fontWeight: 700
+                }}
+            >
+                {l}
+            </span>
+
+            <span
+                style={{
+                    fontSize: 13,
+                    fontWeight: 700
+                }}
+            >
+                {v}
+            </span>
+        </div>
+    );
+}
+
+function FinalReview({
+    go,
+    back,
+    enhancedImageUrl
+}) {
+    const s = useStrings();
+    const product = useProduct();
+
+    const [isEditing, setIsEditing] = useState(false);
+
+    const [data, setData] = useState({
+        name: product.name || "",
+        material: product.material || "",
+        craft: product.craft || "",
+        origin: product.origin || "",
+        prodTime: product.prodTime || "",
+        stock: product.stock || "",
+        moq: product.moq || "",
+        price: product.suggestedPrice || 950,
+        description: product.description || "",
+        story: product.story || ""
+    });
+
+    const handleSave = () => {
+        setIsEditing(false);
+    };
+
+    const fields = [
+        ["Name", "name"],
+        ["Material", "material"],
+        ["Craft", "craft"],
+        ["Origin", "origin"],
+        ["Production", "prodTime"],
+        ["Stock", "stock"],
+        ["MOQ", "moq"]
+    ];
+
+    return (
+        <ScreenShell>
+            <ProgressDots step={6} total={6} />
+
+            <Header
+                title={s.reviewListing}
+                sub={s.reviewSub}
+                onBack={back}
+            />
+
+            <div
+                className="card"
+                style={{
+                    marginBottom: 14,
+                    padding: 0,
+                    overflow: "hidden"
+                }}
+            >
+                <div style={{ height: 150 }}>
+                    <ProductImage
+                        size={150}
+                        src={enhancedImageUrl}
+                    />
+                </div>
+
+                <div style={{ padding: 16 }}>
+                    {isEditing ? (
+                        <input
+                            type="text"
+                            value={data.name}
+                            onChange={e =>
+                                setData({
+                                    ...data,
+                                    name: e.target.value
+                                })
+                            }
+                            style={{
+                                fontSize: 17,
+                                fontWeight: 800,
+                                width: "100%",
+                                border:
+                                    "1.5px solid var(--gold)",
+                                borderRadius: 10,
+                                padding: "6px 10px",
+                                marginBottom: 6,
+                                background: "#FFFDF5"
+                            }}
+                        />
+                    ) : (
+                        <div
+                            style={{
+                                fontWeight: 800,
+                                fontSize: 17,
+                                marginBottom: 2
+                            }}
+                        >
+                            {data.name}
+                        </div>
+                    )}
+
+                    {isEditing ? (
+                        <input
+                            type="number"
+                            value={data.price}
+                            onChange={e =>
+                                setData({
+                                    ...data,
+                                    price: Number(
+                                        e.target.value
+                                    )
+                                })
+                            }
+                            style={{
+                                fontSize: 22,
+                                fontWeight: 600,
+                                width: "50%",
+                                border:
+                                    "1.5px solid var(--gold)",
+                                borderRadius: 10,
+                                padding: "4px 10px",
+                                marginBottom: 10,
+                                background: "#FFFDF5",
+                                fontFamily:
+                                    "'Fraunces',serif",
+                                color: "var(--bamboo-deep)"
+                            }}
+                        />
+                    ) : (
+                        <div
+                            className="serif"
+                            style={{
+                                fontSize: 22,
+                                fontWeight: 600,
+                                color: "var(--bamboo-deep)",
+                                marginBottom: 10
+                            }}
+                        >
+                            ₹{data.price}
+                        </div>
+                    )}
+
+                    {fields.map(([label, key]) => (
+                        <div
+                            key={key}
+                            style={{
+                                display: "flex",
+                                justifyContent:
+                                    "space-between",
+                                padding: "7px 0",
+                                borderTop:
+                                    "1px solid var(--line)"
+                            }}
+                        >
+                            <span
+                                style={{
+                                    fontSize: 12.5,
+                                    color: "var(--ink-soft)",
+                                    fontWeight: 700
+                                }}
+                            >
+                                {label}
+                            </span>
+
+                            {isEditing ? (
+                                <input
+                                    type="text"
+                                    value={data[key]}
+                                    onChange={e =>
+                                        setData({
+                                            ...data,
+                                            [key]: e.target.value
+                                        })
+                                    }
+                                    style={{
+                                        width: "50%",
+                                        textAlign: "right",
+                                        padding: "4px 8px",
+                                        borderRadius: 8,
+                                        border:
+                                            "1.5px solid var(--gold)",
+                                        fontSize: 13,
+                                        fontWeight: 700,
+                                        background: "#FFFDF5"
+                                    }}
+                                />
                             ) : (
-                                <>
-                                    <button className="btn-primary" style={ { display: "flex", alignItems: "center",
-                                            justifyContent: "center", gap: 8 } } onClick={ handleSend }><Icon name="send"
-                                            size={ 16 } color="#fff" /> { s.send }</button>
-                                    <div style={ { display: "flex", gap: 10 } }>
-                                        <button className="btn-secondary" style={ { flex: 1 } } onClick={ () => setIsEditing(
-                                            true) }>{ s.editReply }</button>
-                                        <button className="btn-secondary" style={ { flex: 1 } } onClick={ handleSend }>{ s
-                                                .useSuggestion }</button>
-                                    </div>
-                                </>
-                            ) }
+                                <span
+                                    style={{
+                                        fontSize: 13,
+                                        fontWeight: 700
+                                    }}
+                                >
+                                    {data[key]}
+                                </span>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div
+                className="card"
+                style={{ marginBottom: 14 }}
+            >
+                <div className="field-label">
+                    {s.description}
+                </div>
+
+                {isEditing ? (
+                    <textarea
+                        className="inline-edit-textarea"
+                        value={data.description}
+                        onChange={e =>
+                            setData({
+                                ...data,
+                                description: e.target.value
+                            })
+                        }
+                        rows={3}
+                    />
+                ) : (
+                    <p
+                        style={{
+                            margin: 0,
+                            fontSize: 13.5,
+                            lineHeight: 1.6,
+                            color: "var(--ink-soft)"
+                        }}
+                    >
+                        {data.description}
+                    </p>
+                )}
+            </div>
+
+            <div
+                className="card"
+                style={{ marginBottom: 14 }}
+            >
+                <div className="field-label">
+                    {s.craftStory}
+                </div>
+
+                {isEditing ? (
+                    <textarea
+                        className="inline-edit-textarea"
+                        value={data.story}
+                        onChange={e =>
+                            setData({
+                                ...data,
+                                story: e.target.value
+                            })
+                        }
+                        rows={3}
+                    />
+                ) : (
+                    <p
+                        style={{
+                            margin: 0,
+                            fontSize: 13.5,
+                            lineHeight: 1.6,
+                            color: "var(--ink-soft)"
+                        }}
+                    >
+                        {data.story}
+                    </p>
+                )}
+            </div>
+
+            <div
+                className="tag ai"
+                style={{ marginBottom: 16 }}
+            >
+                <Icon
+                    name="sparkle"
+                    size={13}
+                />{" "}
+                {s.createdWithAI}
+            </div>
+
+            <div style={{ flex: 1 }}></div>
+
+            <div
+                style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10
+                }}
+            >
+                {isEditing ? (
+                    <div
+                        style={{
+                            display: "flex",
+                            gap: 10
+                        }}
+                    >
+                        <button
+                            className="btn-primary"
+                            onClick={handleSave}
+                            style={{ flex: 1 }}
+                        >
+                            {s.saveChanges}
+                        </button>
+
+                        <button
+                            className="btn-secondary"
+                            onClick={() =>
+                                setIsEditing(false)
+                            }
+                            style={{ flex: 1 }}
+                        >
+                            {s.cancel}
+                        </button>
+                    </div>
+                ) : (
+                    <>
+                        <button
+                            className="btn-primary"
+                            onClick={() =>
+                                go("publishing")
+                            }
+                        >
+                            {s.publishProduct}
+                        </button>
+
+                        <button
+                            className="btn-secondary"
+                            onClick={() =>
+                                setIsEditing(true)
+                            }
+                        >
+                            {s.edit}
+                        </button>
+                    </>
+                )}
+            </div>
+        </ScreenShell>
+    );
+}
+
+
+// ---------- PUBLISHING ----------
+function Publishing({
+    go,
+    back,
+    onPublishDone,
+    enhancedImageUrl
+}) {
+    const s = useStrings();
+
+    const steps = s.listingSteps || [
+        "Preparing product data",
+        "Generating thumbnail",
+        "Creating product page",
+        "Checking listing quality",
+        "Optimizing for search",
+        "Finalizing your listing"
+    ];
+
+    const [done, setDone] = useState(false);
+
+    useEffect(() => {
+        if (done) {
+            onPublishDone();
+        }
+    }, [done]);
+
+    return (
+        <ScreenShell>
+            <Header
+                title={s.preparingListing}
+                onBack={back}
+            />
+
+            <div
+                style={{
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center"
+                }}
+            >
+                {!done ? (
+                    <>
+                        <div
+                            style={{
+                                display: "flex",
+                                justifyContent: "center",
+                                marginBottom: 10
+                            }}
+                        >
+                            <div style={{ height: 110 }}>
+                                <ProductImage
+                                    size={110}
+                                    src={enhancedImageUrl}
+                                />
+                            </div>
+                        </div>
+
+                        <Checklist
+                            items={steps}
+                            speed={480}
+                            onDone={() => setDone(true)}
+                        />
+                    </>
+                ) : (
+                    <div style={{ textAlign: "center" }}>
+                        <div
+                            style={{
+                                width: 74,
+                                height: 74,
+                                borderRadius: "50%",
+                                background: "var(--ok)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                margin: "0 auto 18px"
+                            }}
+                        >
+                            <Icon
+                                name="check"
+                                size={34}
+                                color="#fff"
+                            />
+                        </div>
+
+                        <h1
+                            className="serif"
+                            style={{
+                                fontSize: 24,
+                                fontWeight: 600,
+                                marginBottom: 8
+                            }}
+                        >
+                            {s.productLive}
+                        </h1>
+
+                        <p
+                            style={{
+                                color: "var(--ink-soft)",
+                                fontSize: 14
+                            }}
+                        >
+                            {s.buyersCanDiscover}
+                        </p>
+                    </div>
+                )}
+            </div>
+
+            {done && (
+                <button
+                    className="btn-primary"
+                    onClick={() => go("live")}
+                >
+                    {s.continue}
+                </button>
+            )}
+        </ScreenShell>
+    );
+}
+
+
+// ---------- LIVE LISTING ----------
+function LiveListing({
+    go,
+    back,
+    enhancedImageUrl
+}) {
+    const s = useStrings();
+    const product = useProduct();
+
+    return (
+        <ScreenShell>
+            <Header
+                title={product.name}
+                tagText={s.live}
+                tagType="live"
+                onBack={back}
+            />
+
+            <div
+                style={{
+                    borderRadius: 16,
+                    overflow: "hidden",
+                    marginBottom: 16,
+                    height: 160
+                }}
+            >
+                <ProductImage
+                    size={160}
+                    src={enhancedImageUrl}
+                />
+            </div>
+
+            <div
+                className="serif"
+                style={{
+                    fontSize: 26,
+                    fontWeight: 600,
+                    color: "var(--bamboo-deep)",
+                    marginBottom: 14
+                }}
+            >
+                ₹{product.suggestedPrice || 950}
+            </div>
+
+            <div
+                style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr 1fr",
+                    gap: 10,
+                    marginBottom: 20
+                }}
+            >
+                {[
+                    [
+                        "Stock",
+                        product.stock || "12"
+                    ],
+                    ["Views", "0"],
+                    ["Enquiries", "0"]
+                ].map(([l, v]) => (
+                    <div
+                        key={l}
+                        className="card"
+                        style={{
+                            textAlign: "center",
+                            padding: 14
+                        }}
+                    >
+                        <div
+                            style={{
+                                fontWeight: 800,
+                                fontSize: 17
+                            }}
+                        >
+                            {v}
+                        </div>
+
+                        <div
+                            style={{
+                                fontSize: 11,
+                                color: "var(--ink-soft)",
+                                fontWeight: 700
+                            }}
+                        >
+                            {l}
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            <div style={{ flex: 1 }}></div>
+
+            <button
+                className="btn-primary"
+                onClick={() => go("buyerMatch")}
+            >
+                {s.findBuyers}
+            </button>
+        </ScreenShell>
+    );
+}
+
+
+// ---------- BUYER MATCH ----------
+function BuyerMatch({ go, back }) {
+    const s = useStrings();
+
+    return (
+        <ScreenShell>
+            <Header
+                title={s.foundBuyers}
+                sub={s.foundBuyersSub}
+                onBack={back}
+            />
+
+            <div
+                style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
+                    marginBottom: 16
+                }}
+            >
+                <BuyerCard
+                    name={s.buyer1Name}
+                    match={94}
+                    matchLabel={s.buyer1Match}
+                    color="var(--bamboo)"
+                    onClick={() => go("buyerDetail")}
+                />
+
+                <BuyerCard
+                    name={s.buyer2Name}
+                    match={88}
+                    matchLabel={s.buyer2Match}
+                    color="var(--clay)"
+                />
+
+                <BuyerCard
+                    name={s.buyer3Name}
+                    match={84}
+                    matchLabel={s.buyer3Match}
+                    color="var(--teal)"
+                />
+            </div>
+
+            <div
+                className="card"
+                style={{ marginBottom: 16 }}
+            >
+                <div className="field-label">
+                    {s.whyBuyer}
+                </div>
+
+                {[
+                    s.interestedIn,
+                    s.lookingFor,
+                    s.targetPrice,
+                    s.interestedInCrafts
+                ].map(t => (
+                    <div
+                        key={t}
+                        style={{
+                            display: "flex",
+                            gap: 8,
+                            alignItems: "flex-start",
+                            padding: "6px 0"
+                        }}
+                    >
+                        <Icon
+                            name="check"
+                            size={15}
+                            color="var(--ok)"
+                        />
+
+                        <span
+                            style={{
+                                fontSize: 13.5
+                            }}
+                        >
+                            {t}
+                        </span>
+                    </div>
+                ))}
+            </div>
+
+            <div style={{ flex: 1 }}></div>
+
+            <button
+                className="btn-primary"
+                onClick={() => go("buyerDetail")}
+            >
+                {s.viewBestMatch}
+            </button>
+        </ScreenShell>
+    );
+}
+
+
+// ---------- BUYER DETAIL ----------
+function BuyerDetail({ go, back }) {
+    const s = useStrings();
+    const product = useProduct();
+
+    const [sent, setSent] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+
+    const [message, setMessage] = useState(
+        `Namaste. Thank you for your interest in my handmade ${product.name || "handmade product"}. I can provide 5 pieces at ₹950 each. Please let me know if you would like to discuss the order.`
+    );
+
+    const handleSend = () => {
+        setSent(true);
+        setIsEditing(false);
+    };
+
+    return (
+        <ScreenShell>
+            <Header
+                title={s.buyerDetailTitle}
+                tagText={s.matchTag}
+                onBack={back}
+            />
+
+            <div
+                className="card"
+                style={{ marginBottom: 16 }}
+            >
+                <div
+                    style={{
+                        fontWeight: 700,
+                        fontSize: 14.5,
+                        marginBottom: 4
+                    }}
+                >
+                    {s.interestedQty}
+                </div>
+
+                <div
+                    style={{
+                        fontSize: 13,
+                        color: "var(--ink-soft)"
+                    }}
+                >
+                    {s.expectedPrice}
+                </div>
+            </div>
+
+            <div
+                className="tag ai"
+                style={{ marginBottom: 10 }}
+            >
+                <Icon
+                    name="sparkle"
+                    size={13}
+                />{" "}
+                {s.suggestedReply}
+            </div>
+
+            <div
+                className="card"
+                style={{ marginBottom: 16 }}
+            >
+                {isEditing ? (
+                    <textarea
+                        className="inline-edit-textarea"
+                        value={message}
+                        onChange={e =>
+                            setMessage(e.target.value)
+                        }
+                        rows={5}
+                    />
+                ) : (
+                    <p
+                        style={{
+                            margin: 0,
+                            fontSize: 14,
+                            lineHeight: 1.6
+                        }}
+                    >
+                        {message}
+                    </p>
+                )}
+            </div>
+
+            <div style={{ flex: 1 }}></div>
+
+            {!sent ? (
+                <div
+                    style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 10
+                    }}
+                >
+                    {isEditing ? (
+                        <div
+                            style={{
+                                display: "flex",
+                                gap: 10
+                            }}
+                        >
+                            <button
+                                className="btn-primary"
+                                onClick={handleSend}
+                                style={{ flex: 1 }}
+                            >
+                                <Icon
+                                    name="send"
+                                    size={16}
+                                    color="#fff"
+                                />{" "}
+                                {s.send}
+                            </button>
+
+                            <button
+                                className="btn-secondary"
+                                onClick={() =>
+                                    setIsEditing(false)
+                                }
+                                style={{ flex: 1 }}
+                            >
+                                {s.cancel}
+                            </button>
                         </div>
                     ) : (
-                        <button className="btn-primary" onClick={ () => go("copilot") }>{ s.checkBusiness }</button>
-                    ) }
-                    { sent && <div className="toast"><Icon name="check" size={ 16 } /> { s.messageSent }</div> }
-                </ScreenShell>
-            );
-        }
+                        <>
+                            <button
+                                className="btn-primary"
+                                style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    gap: 8
+                                }}
+                                onClick={handleSend}
+                            >
+                                <Icon
+                                    name="send"
+                                    size={16}
+                                    color="#fff"
+                                />{" "}
+                                {s.send}
+                            </button>
+
+                            <div
+                                style={{
+                                    display: "flex",
+                                    gap: 10
+                                }}
+                            >
+                                <button
+                                    className="btn-secondary"
+                                    style={{ flex: 1 }}
+                                    onClick={() =>
+                                        setIsEditing(true)
+                                    }
+                                >
+                                    {s.editReply}
+                                </button>
+
+                                <button
+                                    className="btn-secondary"
+                                    style={{ flex: 1 }}
+                                    onClick={handleSend}
+                                >
+                                    {s.useSuggestion}
+                                </button>
+                            </div>
+                        </>
+                    )}
+                </div>
+            ) : (
+                <button
+                    className="btn-primary"
+                    onClick={() => go("copilot")}
+                >
+                    {s.checkBusiness}
+                </button>
+            )}
+
+            {sent && (
+                <div className="toast">
+                    <Icon
+                        name="check"
+                        size={16}
+                    />{" "}
+                    {s.messageSent}
+                </div>
+            )}
+        </ScreenShell>
+    );
+}
+
+// ===== TAHA END =====
 
         // ---------- COPILOT (FULL IMPLEMENTATION FROM copilot-feature.html) ----------
         function Copilot({ go, back }) {
